@@ -41,7 +41,7 @@ O todo a la vez con `script.bat` desde la raíz.
 3. Refínalo por chat: *"hazla 10 mm más ancha"*, *"añade dos agujeros M3 separados 20 mm"*. Cada iteración crea una versión nueva; el código CadQuery es siempre la fuente de verdad ("Ver código" en cada resultado).
 4. Exporta STL (binario) o STEP (B-rep exacto) con los botones del visor.
 5. **Imagen → CAD**: adjunta una foto de una pieza con el botón 📷; `qwen3-vl:8b` la analiza y extrae un brief estructurado (tipo de pieza, agujeros, proporciones) que alimenta la generación. Tu texto aporta las dimensiones reales: *"la pieza de la foto, diámetro exterior 30 mm"*.
-6. **Modo orgánico** (🗿, requiere el servicio de `organic/`): para figuras/esculturas que el CAD paramétrico no puede expresar. Adjunta una foto y elige el tamaño (mm del eje mayor); TripoSR reconstruye la malla y el backend la repara (componente mayor, agujeros, normales) y la apoya en la cama. Exporta STL/3MF — no hay STEP ni "Ver código": una malla neuronal no tiene B-rep.
+6. **Modo orgánico** (🗿, requiere el servicio de `organic/`): para figuras/esculturas que el CAD paramétrico no puede expresar. Adjunta una foto y elige el tamaño (mm del eje mayor); TRELLIS (Microsoft) reconstruye la malla y el backend la repara (componente mayor, agujeros, normales) y la apoya en la cama. Exporta STL/3MF — no hay STEP ni "Ver código": una malla neuronal no tiene B-rep.
 
 Prueba sin frontend:
 
@@ -61,7 +61,7 @@ uv run python scripts\cli_generate.py "una escuadra en L con dos agujeros M4"
 | `backend/app/prompts/` | Prompt del sistema con few-shots + chuleta CadQuery; plantillas generate/refine/repair |
 | `backend/app/routers/` | FastAPI: sesiones, SSE de progreso, export, health |
 | `backend/app/services/organic.py` | Cliente del servicio orgánico + reparación/normalizado de malla (trimesh) |
-| `organic/` | Microservicio aparte (uv propio): TripoSR + PyTorch cu128, foto → STL en `:8001` |
+| `organic/` | Microservicio aparte (uv propio): TRELLIS (o TripoSR) + PyTorch cu128, foto → STL en `:8001` |
 | `frontend/` | React + react-three-fiber: visor Z-up, chat con streaming de código, export |
 
 Los datos de sesión viven en `backend/data/sessions/{id}/` (JSON + una carpeta inmutable por versión) y sobreviven reinicios.
@@ -82,4 +82,4 @@ uv run pytest        # sandbox, seguridad AST, mallas y API (sin LLM)
 ## Hoja de ruta
 
 - Gizmos de edición manual, operaciones booleanas entre piezas y panel de parámetros editables.
-- Hunyuan3D-2 como alternativa de mayor calidad a TripoSR en el servicio orgánico.
+- ~~Hunyuan3D-2/TRELLIS como alternativa de mayor calidad a TripoSR en el servicio orgánico~~ — hecho: TRELLIS es el motor por defecto (`ORGANIC_ENGINE=triposr` para volver al antiguo).
