@@ -1,6 +1,6 @@
 """Client for the organic (photo -> neural mesh) microservice, plus mesh repair.
 
-The heavy TripoSR/PyTorch stack lives in the separate `organic/` project and is
+The heavy TRELLIS/PyTorch stack lives in the separate `organic/` project and is
 reached over HTTP. Meshes coming out of neural reconstruction are dirty:
 multiple components, holes, flipped normals, arbitrary scale. This module
 repairs them and normalizes size/placement before they enter the regular
@@ -69,6 +69,22 @@ def repair_and_normalize(
     mesh.remove_unreferenced_vertices()
     trimesh.repair.fill_holes(mesh)
     trimesh.repair.fix_normals(mesh)
+
+    if not mesh.is_watertight:
+        # FlexiCubes (TRELLIS) leaves a handful of non-manifold edges that
+        # trimesh cannot fix; MeshFix rebuilds a clean closed surface.
+        try:
+            import numpy as np
+            import pymeshfix
+
+            vc, fc = pymeshfix.clean_from_arrays(
+                np.asarray(mesh.vertices), np.asarray(mesh.faces)
+            )
+            fixed = trimesh.Trimesh(vc, fc)
+            if not fixed.is_empty and len(fixed.faces) > 0:
+                mesh = fixed
+        except Exception:
+            pass  # better a printable-but-flagged mesh than a hard failure
 
     extents = mesh.extents
     if extents.max() <= 0:

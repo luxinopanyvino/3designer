@@ -52,7 +52,7 @@ export default function MessageInput() {
           onClick={() => setMode('organic')}
           title={
             organicAvailable
-              ? 'Formas orgánicas: reconstrucción neuronal desde una foto (TripoSR)'
+              ? 'Formas orgánicas: reconstrucción neuronal desde una foto (TRELLIS)'
               : 'Servicio orgánico no disponible — arranca organic/ (uv run uvicorn service:app --port 8001)'
           }
         >

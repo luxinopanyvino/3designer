@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     bed_size_mm: float = 220.0
     max_height_mm: float = 250.0
     organic_service_url: str = "http://localhost:8001"
-    organic_timeout_s: int = 300
+    organic_timeout_s: int = 600
     organic_default_size_mm: float = 80.0
     data_dir: Path = Path(__file__).resolve().parent.parent / "data"
 
