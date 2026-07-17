@@ -6,6 +6,7 @@ const STAGE_LABELS: Record<string, string> = {
   llm_generating: 'Escribiendo código CAD…',
   executing: 'Construyendo el modelo…',
   repairing: 'Corrigiendo errores…',
+  organic_generating: 'Reconstruyendo la forma 3D (TripoSR)…',
 }
 
 export default function GenerationStatus() {

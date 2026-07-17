@@ -37,6 +37,7 @@ class Version:
     volume_mm3: float
     watertight: bool
     warnings: list[str] = field(default_factory=list)
+    source: str = "cad"  # "cad" (parametric, has code+STEP) | "organic" (neural mesh)
     created_at: str = field(default_factory=_now)
 
 
@@ -114,13 +115,14 @@ class SessionStore:
         self.save(session)
         return message
 
-    def add_version(self, session: Session, mesh_info: MeshInfo) -> Version:
+    def add_version(self, session: Session, mesh_info: MeshInfo, source: str = "cad") -> Version:
         version = Version(
             version=len(session.versions) + 1,
             dimensions_mm=mesh_info.dimensions_mm,
             volume_mm3=mesh_info.volume_mm3,
             watertight=mesh_info.watertight,
             warnings=list(mesh_info.warnings),
+            source=source,
         )
         session.versions.append(version)
         self.save(session)

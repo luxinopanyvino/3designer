@@ -23,10 +23,18 @@ export function getSession(id: string): Promise<SessionData> {
   return request(`${API}/sessions/${id}`)
 }
 
-export function postMessage(id: string, content: string, image?: File): Promise<{ job_id: string }> {
+export function postMessage(
+  id: string,
+  content: string,
+  image?: File,
+  mode: 'cad' | 'organic' = 'cad',
+  targetSizeMm?: number,
+): Promise<{ job_id: string }> {
   const form = new FormData()
   form.append('content', content)
+  form.append('mode', mode)
   if (image) form.append('image', image)
+  if (targetSizeMm) form.append('target_size_mm', String(targetSizeMm))
   return request(`${API}/sessions/${id}/messages`, { method: 'POST', body: form })
 }
 

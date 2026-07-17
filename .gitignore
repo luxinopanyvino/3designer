@@ -4,6 +4,9 @@ __pycache__/
 .venv/
 .pytest_cache/
 
+# Vendored TripoSR (clon con .git embebido; ver organic/README.md)
+organic/vendor/
+
 # Runtime artifacts
 backend/data/
 *.stl

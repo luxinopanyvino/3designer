@@ -19,6 +19,7 @@ class VersionOut(BaseModel):
     volume_mm3: float
     watertight: bool
     warnings: list[str]
+    source: str = "cad"
     created_at: str
 
 
@@ -48,5 +49,6 @@ class OllamaHealth(BaseModel):
 class HealthOut(BaseModel):
     status: str
     ollama: OllamaHealth
+    organic_available: bool = False
     export_formats: list[str]
     bed_size_mm: float

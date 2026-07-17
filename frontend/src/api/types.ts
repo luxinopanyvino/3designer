@@ -16,8 +16,11 @@ export interface Version {
   volume_mm3: number
   watertight: boolean
   warnings: string[]
+  source?: 'cad' | 'organic'
   created_at: string
 }
+
+export type Mode = 'cad' | 'organic'
 
 export interface SessionData {
   id: string
@@ -34,11 +37,18 @@ export interface Health {
     code_model_present: boolean
     vision_model_present: boolean
   }
+  organic_available: boolean
   export_formats: string[]
   bed_size_mm: number
 }
 
-export type Stage = 'idle' | 'vision_analyzing' | 'llm_generating' | 'executing' | 'repairing'
+export type Stage =
+  | 'idle'
+  | 'vision_analyzing'
+  | 'llm_generating'
+  | 'executing'
+  | 'repairing'
+  | 'organic_generating'
 
 export interface EventHandlers {
   onStatus: (stage: Stage, attempt: number) => void

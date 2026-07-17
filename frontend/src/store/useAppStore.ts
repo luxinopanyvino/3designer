@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import * as api from '../api/client'
-import type { Health, Message, Stage, Version } from '../api/types'
+import type { Health, Message, Mode, Stage, Version } from '../api/types'
 
 interface AppState {
   sessionId: string | null
@@ -12,10 +12,14 @@ interface AppState {
   attempt: number
   streamedCode: string
   health: Health | null
+  mode: Mode
+  organicSizeMm: number
   init: () => Promise<void>
   newSession: () => Promise<void>
   sendMessage: (content: string, image?: File) => Promise<void>
   setCurrentVersion: (v: number) => void
+  setMode: (mode: Mode) => void
+  setOrganicSizeMm: (mm: number) => void
 }
 
 const SESSION_KEY = 'printcad-session-id'
@@ -30,6 +34,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   attempt: 1,
   streamedCode: '',
   health: null,
+  mode: 'cad',
+  organicSizeMm: 80,
 
   init: async () => {
     api.getHealth().then((health) => set({ health })).catch(() => set({ health: null }))
@@ -67,12 +73,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   sendMessage: async (content: string, image?: File) => {
-    const { sessionId, busy } = get()
+    const { sessionId, busy, mode, organicSizeMm } = get()
     if (!sessionId || busy || (!content.trim() && !image)) return
+    if (mode === 'organic' && !image) return
 
     set((s) => ({
       busy: true,
-      stage: image ? 'vision_analyzing' : 'llm_generating',
+      stage: mode === 'organic' ? 'organic_generating' : image ? 'vision_analyzing' : 'llm_generating',
       attempt: 1,
       streamedCode: '',
       messages: [
@@ -99,7 +106,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     try {
-      const { job_id } = await api.postMessage(sessionId, content, image)
+      const { job_id } = await api.postMessage(
+        sessionId,
+        content,
+        image,
+        mode,
+        mode === 'organic' ? organicSizeMm : undefined,
+      )
       api.subscribeEvents(sessionId, job_id, {
         onStatus: (stage, attempt) => set({ stage, attempt }),
         onCodeDelta: (text) => set((s) => ({ streamedCode: s.streamedCode + text })),
@@ -132,4 +145,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setCurrentVersion: (v: number) => set({ currentVersion: v }),
+  setMode: (mode: Mode) => set({ mode }),
+  setOrganicSizeMm: (mm: number) => set({ organicSizeMm: mm }),
 }))

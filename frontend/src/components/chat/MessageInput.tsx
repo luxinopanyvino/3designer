@@ -10,6 +10,11 @@ export default function MessageInput() {
   const sendMessage = useAppStore((s) => s.sendMessage)
   const hasModel = useAppStore((s) => s.versions.length > 0)
   const visionAvailable = useAppStore((s) => s.health?.ollama.vision_model_present ?? true)
+  const mode = useAppStore((s) => s.mode)
+  const setMode = useAppStore((s) => s.setMode)
+  const organicAvailable = useAppStore((s) => s.health?.organic_available ?? false)
+  const organicSizeMm = useAppStore((s) => s.organicSizeMm)
+  const setOrganicSizeMm = useAppStore((s) => s.setOrganicSizeMm)
 
   useEffect(() => {
     if (!image) {
@@ -21,8 +26,10 @@ export default function MessageInput() {
     return () => URL.revokeObjectURL(url)
   }, [image])
 
+  const canSend = mode === 'organic' ? image !== null : value.trim() !== '' || image !== null
+
   const send = () => {
-    if ((!value.trim() && !image) || busy) return
+    if (!canSend || busy) return
     void sendMessage(value.trim(), image ?? undefined)
     setValue('')
     setImage(null)
@@ -31,6 +38,40 @@ export default function MessageInput() {
 
   return (
     <div className="message-input-wrap">
+      <div className="mode-toggle">
+        <button
+          className={`mode-option ${mode === 'cad' ? 'active' : ''}`}
+          onClick={() => setMode('cad')}
+          title="Piezas funcionales: código CAD paramétrico, editable por chat, export STEP"
+        >
+          ⚙ Funcional (CAD)
+        </button>
+        <button
+          className={`mode-option ${mode === 'organic' ? 'active' : ''}`}
+          disabled={!organicAvailable}
+          onClick={() => setMode('organic')}
+          title={
+            organicAvailable
+              ? 'Formas orgánicas: reconstrucción neuronal desde una foto (TripoSR)'
+              : 'Servicio orgánico no disponible — arranca organic/ (uv run uvicorn service:app --port 8001)'
+          }
+        >
+          🗿 Orgánico (foto)
+        </button>
+        {mode === 'organic' && (
+          <label className="size-input">
+            tamaño
+            <input
+              type="number"
+              min={5}
+              max={220}
+              value={organicSizeMm}
+              onChange={(e) => setOrganicSizeMm(Number(e.target.value) || 80)}
+            />
+            mm
+          </label>
+        )}
+      </div>
       {preview && (
         <div className="image-preview">
           <img src={preview} alt="referencia" />
@@ -69,16 +110,18 @@ export default function MessageInput() {
             }
           }}
           placeholder={
-            image
-              ? 'Añade dimensiones reales… (p. ej. "el ancho real es 60 mm")'
-              : hasModel
-                ? 'Refina el modelo… (p. ej. "hazlo 10 mm más ancho")'
-                : 'Describe la pieza a imprimir o adjunta una foto…'
+            mode === 'organic'
+              ? 'Adjunta una foto del objeto (el texto es opcional)…'
+              : image
+                ? 'Añade dimensiones reales… (p. ej. "el ancho real es 60 mm")'
+                : hasModel
+                  ? 'Refina el modelo… (p. ej. "hazlo 10 mm más ancho")'
+                  : 'Describe la pieza a imprimir o adjunta una foto…'
           }
           rows={2}
           disabled={busy}
         />
-        <button onClick={send} disabled={busy || (!value.trim() && !image)}>
+        <button onClick={send} disabled={busy || !canSend}>
           {busy ? 'Generando…' : 'Enviar'}
         </button>
       </div>

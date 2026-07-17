@@ -58,9 +58,15 @@ async def post_message(
     session_id: str,
     content: str = Form(""),
     image: UploadFile | None = File(None),
+    mode: str = Form("cad"),
+    target_size_mm: float | None = Form(None),
 ):
     session = _get_session_or_404(session_id)
     content = content.strip()
+    if mode not in ("cad", "organic"):
+        raise HTTPException(status_code=422, detail="mode must be 'cad' or 'organic'")
+    if mode == "organic" and image is None:
+        raise HTTPException(status_code=422, detail="Organic mode requires an image")
     if not content and image is None:
         raise HTTPException(status_code=422, detail="Provide a message or an image")
     if jobs.session_busy(session_id):
@@ -87,12 +93,17 @@ async def post_message(
         store.save(session)
 
     job = jobs.create(session_id)
-    asyncio.create_task(_run_job(session, job, content, image_bytes))
+    asyncio.create_task(_run_job(session, job, content, image_bytes, mode, target_size_mm))
     return JobAcceptedOut(job_id=job.id)
 
 
 async def _run_job(
-    session: Session, job: Job, content: str, image_bytes: bytes | None = None
+    session: Session,
+    job: Job,
+    content: str,
+    image_bytes: bytes | None = None,
+    mode: str = "cad",
+    target_size_mm: float | None = None,
 ) -> None:
     async def emit(event: str, data: dict) -> None:
         await jobs.emit(job, event, data)
@@ -100,6 +111,10 @@ async def _run_job(
     version_number = store.next_version_number(session)
     out_dir = store.version_dir(session.id, version_number)
     previous_code = store.latest_code(session)
+
+    if mode == "organic":
+        await _run_organic_job(session, job, image_bytes, target_size_mm, out_dir, emit)
+        return
 
     async with store.lock(session.id):
         try:
@@ -151,6 +166,51 @@ async def _run_job(
             **asdict(version),
             **version_urls(session.id, version.version),
             "code": result.code,
+        })
+
+
+async def _run_organic_job(
+    session: Session,
+    job: Job,
+    image_bytes: bytes,
+    target_size_mm: float | None,
+    out_dir,
+    emit,
+) -> None:
+    from app.config import settings
+    from app.services.organic import OrganicServiceError, generate_organic_model
+
+    async with store.lock(session.id):
+        try:
+            info, _stl, _glb = await generate_organic_model(
+                image_bytes=image_bytes,
+                target_size_mm=target_size_mm or settings.organic_default_size_mm,
+                out_dir=out_dir,
+                emit=emit,
+            )
+        except OrganicServiceError as exc:
+            shutil.rmtree(out_dir, ignore_errors=True)
+            store.add_message(session, "assistant", str(exc), error=True)
+            await emit("error", {"message": str(exc), "attempts": 1, "last_traceback": ""})
+            return
+        except Exception as exc:  # noqa: BLE001
+            shutil.rmtree(out_dir, ignore_errors=True)
+            store.add_message(
+                session, "assistant", f"Error en la reconstrucción orgánica: {exc}", error=True
+            )
+            await emit("error", {"message": str(exc), "attempts": 1, "last_traceback": ""})
+            return
+
+        version = store.add_version(session, info, source="organic")
+        summary = (
+            f"Modelo orgánico v{version.version}: "
+            f"{info.dimensions_mm['x']} x {info.dimensions_mm['y']} x {info.dimensions_mm['z']} mm"
+        )
+        store.add_message(session, "assistant", summary, version=version.version)
+        await emit("completed", {
+            **asdict(version),
+            **version_urls(session.id, version.version),
+            "code": None,
         })
 
 

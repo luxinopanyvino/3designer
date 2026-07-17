@@ -40,6 +40,7 @@ export default function MessageBubble({ message }: { message: Message }) {
             <span className={`badge ${version.watertight ? 'ok' : 'warn'}`}>
               {version.watertight ? 'estanco' : 'no estanco'}
             </span>
+            {version.source === 'organic' && <span className="badge organic">orgánico</span>}
           </div>
           {version.warnings.map((w, i) => (
             <div key={i} className="warning">⚠ {w}</div>
@@ -50,9 +51,11 @@ export default function MessageBubble({ message }: { message: Message }) {
                 Ver v{version.version}
               </button>
             )}
-            <button className="ghost small" onClick={() => void toggleCode()}>
-              {showCode ? 'Ocultar código' : 'Ver código'}
-            </button>
+            {version.source !== 'organic' && (
+              <button className="ghost small" onClick={() => void toggleCode()}>
+                {showCode ? 'Ocultar código' : 'Ver código'}
+              </button>
+            )}
           </div>
           {showCode && code && <pre className="code-block">{code}</pre>}
         </div>
