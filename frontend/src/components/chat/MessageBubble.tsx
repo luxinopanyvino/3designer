@@ -13,7 +13,12 @@ export default function MessageBubble({ message }: { message: Message }) {
   const version = message.version != null ? versions.find((v) => v.version === message.version) : undefined
 
   if (message.role === 'user') {
-    return <div className="bubble user">{message.content}</div>
+    return (
+      <div className="bubble user">
+        {message.image_url && <img className="bubble-image" src={message.image_url} alt="referencia" />}
+        {message.content}
+      </div>
+    )
   }
 
   const toggleCode = async () => {

@@ -4,6 +4,7 @@ export interface Message {
   content: string
   version: number | null
   error: boolean
+  image_url?: string | null
   created_at: string
 }
 
@@ -27,12 +28,17 @@ export interface SessionData {
 
 export interface Health {
   status: string
-  ollama: { reachable: boolean; models: string[]; code_model_present: boolean }
+  ollama: {
+    reachable: boolean
+    models: string[]
+    code_model_present: boolean
+    vision_model_present: boolean
+  }
   export_formats: string[]
   bed_size_mm: number
 }
 
-export type Stage = 'idle' | 'llm_generating' | 'executing' | 'repairing'
+export type Stage = 'idle' | 'vision_analyzing' | 'llm_generating' | 'executing' | 'repairing'
 
 export interface EventHandlers {
   onStatus: (stage: Stage, attempt: number) => void

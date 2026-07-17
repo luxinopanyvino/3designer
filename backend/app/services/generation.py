@@ -41,19 +41,41 @@ class GenerationFailed(Exception):
         self.last_error = last_error
 
 
+IMAGE_BRIEF_TEMPLATE = (
+    "\n\nDesign brief extracted from the user's reference image (JSON):\n{brief}\n"
+    "The user's text gives the real dimensions; scale the estimated proportions "
+    "from the brief to match them. If the user gave no dimensions, use the "
+    "brief's estimates."
+)
+
+DEFAULT_IMAGE_REQUEST = "Reproduce the part shown in the reference image."
+
+
 async def generate_model(
     *,
     request: str | None = None,
     previous_code: str | None = None,
     instruction: str | None = None,
     recent_context: list[str] | None = None,
+    image_bytes: bytes | None = None,
     out_dir: Path,
     emit: Emit,
     llm: LLMService | None = None,
 ) -> GenerationResult:
-    """First generation: pass `request`. Refinement: pass `previous_code` + `instruction`."""
+    """First generation: pass `request`. Refinement: pass `previous_code` + `instruction`.
+    An optional reference image is analyzed by the vision model and injected as a brief."""
     llm = llm or LLMService()
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    if image_bytes is not None:
+        await emit("status", {"stage": "vision_analyzing", "attempt": 1})
+        brief = await llm.analyze_image(image_bytes)
+        await emit("vision_result", {"brief": brief})
+        suffix = IMAGE_BRIEF_TEMPLATE.format(brief=brief)
+        if previous_code is not None:
+            instruction = (instruction or DEFAULT_IMAGE_REQUEST) + suffix
+        else:
+            request = (request or DEFAULT_IMAGE_REQUEST) + suffix
 
     if previous_code is not None and instruction is not None:
         messages = llm_mod.refine_messages(previous_code, instruction, recent_context or [])

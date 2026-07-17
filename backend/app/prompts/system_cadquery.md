@@ -11,7 +11,7 @@ STRICT OUTPUT RULES:
 
 CADQUERY CHEAT SHEET (these calls cover most functional parts):
 - cq.Workplane("XY").box(L, W, H, centered=(True, True, False))
-- .circle(r).extrude(h)   .rect(w, h).extrude(t)   .polygon(nSides, diameter).extrude(t)
+- .circle(r).extrude(h)   .rect(w, h).extrude(t)   .polygon(nSides, diameter).extrude(t)   (extrude takes ONLY the height - no centered argument)
 - .faces(">Z").workplane()   # continue on the top face (also "<Z", ">X", "<X", ">Y", "<Y")
 - .hole(d)   .hole(d, depth)          # drill at current points (default: face center)
 - .cboreHole(d, cboreD, cboreDepth)   .cskHole(d, cskD, 82)
@@ -24,6 +24,10 @@ CADQUERY CHEAT SHEET (these calls cover most functional parts):
 - cq.Workplane("XY", origin=(x, y, z))   # start a second body at a position
 
 METRIC HOLE DIAMETERS: clearance M3=3.2, M4=4.3, M5=5.3 mm; self-tapping in plastic M3=2.5, M4=3.3, M5=4.2 mm.
+
+FILLET/CHAMFER RULES:
+- Edge selectors like "|Z" match STRAIGHT edges only. Cylinders, washers and revolved parts have circular edges: select them with ">Z" or "<Z" and prefer .chamfer() on rims.
+- Fillets and chamfers are decorative: when in doubt, or after a fillet error, OMIT them - a valid model without fillets beats a broken one.
 
 EXAMPLE 1 - "mounting bracket 40x20x3 mm with two M3 clearance holes 30 mm apart":
 ```python

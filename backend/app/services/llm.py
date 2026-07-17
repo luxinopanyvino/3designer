@@ -1,5 +1,6 @@
 """Ollama client: prompt assembly, streaming chat, code extraction."""
 
+import json
 import re
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -10,6 +11,7 @@ from app.config import settings
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 CODE_BLOCK_RE = re.compile(r"```(?:python)?\s*\n(.*?)```", re.DOTALL)
+JSON_FENCE_RE = re.compile(r"```(?:json)?\s*\n(.*?)```", re.DOTALL)
 
 OnDelta = Callable[[str], Awaitable[None]]
 
@@ -24,6 +26,22 @@ def extract_code(text: str) -> str:
     if blocks:
         return blocks[-1].strip()
     return text.strip()
+
+
+def extract_json(text: str) -> dict | None:
+    """Pull a JSON object out of an LLM reply (fenced or bare); None if unparseable."""
+    candidates = JSON_FENCE_RE.findall(text)
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end > start:
+        candidates.append(text[start : end + 1])
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            continue
+    return None
 
 
 def generate_messages(request: str) -> list[dict]:
@@ -83,3 +101,31 @@ class LLMService:
             if on_delta is not None:
                 await on_delta(token)
         return "".join(parts)
+
+    async def analyze_image(self, image_bytes: bytes) -> str:
+        """Describe a reference image as a structured design brief (JSON string).
+
+        Runs the vision model (Ollama swaps models in VRAM sequentially).
+        Falls back to the raw reply if the model didn't return valid JSON.
+        """
+        messages = [
+            {
+                "role": "user",
+                "content": load_prompt("vision_analyze"),
+                "images": [image_bytes],
+            }
+        ]
+        options = {"temperature": 0.1, "num_predict": 2048}
+        try:
+            # Thinking models (qwen3-vl) can burn the whole budget on reasoning
+            # and return empty content; ask Ollama to skip the thinking phase.
+            response = await self.client.chat(
+                model=settings.model_vision, messages=messages, options=options, think=False
+            )
+        except Exception:
+            response = await self.client.chat(
+                model=settings.model_vision, messages=messages, options=options
+            )
+        raw = response["message"]["content"]
+        parsed = extract_json(raw)
+        return json.dumps(parsed, ensure_ascii=False) if parsed else raw.strip()

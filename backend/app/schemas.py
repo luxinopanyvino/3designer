@@ -7,6 +7,7 @@ class MessageOut(BaseModel):
     content: str
     version: int | None = None
     error: bool = False
+    image_url: str | None = None
     created_at: str
 
 
@@ -33,10 +34,6 @@ class SessionOut(BaseModel):
     versions: list[VersionOut]
 
 
-class MessageIn(BaseModel):
-    content: str
-
-
 class JobAcceptedOut(BaseModel):
     job_id: str
 
@@ -45,6 +42,7 @@ class OllamaHealth(BaseModel):
     reachable: bool
     models: list[str] = []
     code_model_present: bool = False
+    vision_model_present: bool = False
 
 
 class HealthOut(BaseModel):

@@ -23,12 +23,11 @@ export function getSession(id: string): Promise<SessionData> {
   return request(`${API}/sessions/${id}`)
 }
 
-export function postMessage(id: string, content: string): Promise<{ job_id: string }> {
-  return request(`${API}/sessions/${id}/messages`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
-  })
+export function postMessage(id: string, content: string, image?: File): Promise<{ job_id: string }> {
+  const form = new FormData()
+  form.append('content', content)
+  if (image) form.append('image', image)
+  return request(`${API}/sessions/${id}/messages`, { method: 'POST', body: form })
 }
 
 export function getCode(codeUrl: string): Promise<string> {

@@ -14,7 +14,7 @@ interface AppState {
   health: Health | null
   init: () => Promise<void>
   newSession: () => Promise<void>
-  sendMessage: (content: string) => Promise<void>
+  sendMessage: (content: string, image?: File) => Promise<void>
   setCurrentVersion: (v: number) => void
 }
 
@@ -66,13 +66,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
 
-  sendMessage: async (content: string) => {
+  sendMessage: async (content: string, image?: File) => {
     const { sessionId, busy } = get()
-    if (!sessionId || busy || !content.trim()) return
+    if (!sessionId || busy || (!content.trim() && !image)) return
 
     set((s) => ({
       busy: true,
-      stage: 'llm_generating',
+      stage: image ? 'vision_analyzing' : 'llm_generating',
       attempt: 1,
       streamedCode: '',
       messages: [
@@ -83,6 +83,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           content,
           version: null,
           error: false,
+          image_url: image ? URL.createObjectURL(image) : null,
           created_at: new Date().toISOString(),
         },
       ],
@@ -98,7 +99,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     try {
-      const { job_id } = await api.postMessage(sessionId, content)
+      const { job_id } = await api.postMessage(sessionId, content, image)
       api.subscribeEvents(sessionId, job_id, {
         onStatus: (stage, attempt) => set({ stage, attempt }),
         onCodeDelta: (text) => set((s) => ({ streamedCode: s.streamedCode + text })),

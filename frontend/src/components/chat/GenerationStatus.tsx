@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../store/useAppStore'
 
 const STAGE_LABELS: Record<string, string> = {
+  vision_analyzing: 'Analizando la imagen…',
   llm_generating: 'Escribiendo código CAD…',
   executing: 'Construyendo el modelo…',
   repairing: 'Corrigiendo errores…',

@@ -2,6 +2,7 @@
 
 Usage:
     uv run python scripts/cli_generate.py "a 30x20x10 mm box with a 5 mm hole"
+    uv run python scripts/cli_generate.py --image ref.png "washer, 30 mm outer diameter"
 """
 
 import asyncio
@@ -15,19 +16,30 @@ from app.services.generation import GenerationFailed, generate_model  # noqa: E4
 
 
 async def main() -> None:
-    prompt = " ".join(sys.argv[1:]) or "a 30x20x10 mm box with a 5 mm hole through the center"
+    args = sys.argv[1:]
+    image_bytes = None
+    if args and args[0] == "--image":
+        image_bytes = Path(args[1]).read_bytes()
+        args = args[2:]
+    prompt = " ".join(args) or (
+        None if image_bytes else "a 30x20x10 mm box with a 5 mm hole through the center"
+    )
     out_dir = Path(__file__).resolve().parent.parent / "data" / "cli" / time.strftime("%Y%m%d_%H%M%S")
-    print(f"Prompt: {prompt}\nOutput: {out_dir}\n")
+    print(f"Prompt: {prompt}\nImage: {'yes' if image_bytes else 'no'}\nOutput: {out_dir}\n")
 
     async def emit(event: str, data: dict) -> None:
         if event == "status":
             print(f"\n[{data['stage']} attempt {data['attempt']}]", flush=True)
+        elif event == "vision_result":
+            print(f"\nVision brief: {data['brief']}", flush=True)
         elif event == "code_delta":
             print(data["text"], end="", flush=True)
 
     start = time.time()
     try:
-        result = await generate_model(request=prompt, out_dir=out_dir, emit=emit)
+        result = await generate_model(
+            request=prompt, image_bytes=image_bytes, out_dir=out_dir, emit=emit
+        )
     except GenerationFailed as exc:
         print(f"\n\nFAILED after {exc.attempts} attempts ({time.time() - start:.1f}s)")
         print(f"Last error:\n{exc.last_error}")

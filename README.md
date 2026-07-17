@@ -1,6 +1,6 @@
 # PrintCAD — diseño 3D imprimible con IA local
 
-Herramienta web para diseñar piezas de impresión 3D a partir de prompts en lenguaje natural, usando modelos locales de Ollama. El LLM genera código [CadQuery](https://cadquery.readthedocs.io/) paramétrico que se ejecuta en un sandbox y produce sólidos exactos y estancos, listos para el slicer.
+Herramienta web para diseñar piezas de impresión 3D a partir de prompts en lenguaje natural o fotos de referencia, usando modelos locales de Ollama. El LLM genera código [CadQuery](https://cadquery.readthedocs.io/) paramétrico que se ejecuta en un sandbox y produce sólidos exactos y estancos, listos para el slicer.
 
 ```
 Prompt ──► qwen2.5-coder:14b (Ollama) ──► código CadQuery ──► sandbox ──► STL/STEP/GLB
@@ -12,6 +12,7 @@ Prompt ──► qwen2.5-coder:14b (Ollama) ──► código CadQuery ──►
 
 - Windows (probado en Windows 11) · [uv](https://docs.astral.sh/uv/) · Node 20+
 - [Ollama](https://ollama.com) con el modelo de código: `ollama pull qwen2.5-coder:14b` (~9 GB, cabe en 16 GB de VRAM)
+- Opcional, para imagen→CAD: `ollama pull qwen3-vl:8b` (Ollama alterna ambos modelos en VRAM automáticamente)
 
 ## Arranque
 
@@ -32,6 +33,7 @@ npm run dev        # abre http://localhost:5173
 2. El modelo aparece en el visor (cama de 220×220 mm, 1 unidad = 1 mm) con dimensiones, volumen y avisos de imprimibilidad (estanqueidad, voladizos >45°, tamaño de cama).
 3. Refínalo por chat: *"hazla 10 mm más ancha"*, *"añade dos agujeros M3 separados 20 mm"*. Cada iteración crea una versión nueva; el código CadQuery es siempre la fuente de verdad ("Ver código" en cada resultado).
 4. Exporta STL (binario) o STEP (B-rep exacto) con los botones del visor.
+5. **Imagen → CAD**: adjunta una foto de una pieza con el botón 📷; `qwen3-vl:8b` la analiza y extrae un brief estructurado (tipo de pieza, agujeros, proporciones) que alimenta la generación. Tu texto aporta las dimensiones reales: *"la pieza de la foto, diámetro exterior 30 mm"*.
 
 Prueba sin frontend:
 
@@ -69,6 +71,5 @@ uv run pytest        # sandbox, seguridad AST, mallas y API (sin LLM)
 
 ## Hoja de ruta
 
-- **Fase 2 — imagen → CAD**: subir una foto de una pieza; `qwen3-vl:8b` extrae forma/características en JSON y alimenta la generación de código (plantilla `vision_analyze.md` ya incluida).
 - **Fase 3 — formas orgánicas**: TripoSR/Hunyuan3D-2 (PyTorch cu128+, obligatorio para la RTX 5060 Ti) como servicio aparte para foto → malla orgánica, con reparación trimesh.
 - Gizmos de edición manual, operaciones booleanas entre piezas y panel de parámetros editables.

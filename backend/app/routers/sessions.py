@@ -2,14 +2,13 @@ import asyncio
 import shutil
 from dataclasses import asdict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 from sse_starlette.sse import EventSourceResponse
 
 from app.deps import jobs, store, version_urls
 from app.schemas import (
     JobAcceptedOut,
-    MessageIn,
     SessionCreatedOut,
     SessionOut,
 )
@@ -46,22 +45,55 @@ async def get_session(session_id: str):
     )
 
 
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
+IMAGE_EXTENSIONS = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/webp": ".webp",
+}
+
+
 @router.post("/{session_id}/messages", response_model=JobAcceptedOut, status_code=202)
-async def post_message(session_id: str, body: MessageIn):
+async def post_message(
+    session_id: str,
+    content: str = Form(""),
+    image: UploadFile | None = File(None),
+):
     session = _get_session_or_404(session_id)
-    content = body.content.strip()
-    if not content:
-        raise HTTPException(status_code=422, detail="Message content is empty")
+    content = content.strip()
+    if not content and image is None:
+        raise HTTPException(status_code=422, detail="Provide a message or an image")
     if jobs.session_busy(session_id):
         raise HTTPException(status_code=409, detail="A generation is already running")
 
-    store.add_message(session, "user", content)
+    image_bytes: bytes | None = None
+    image_url: str | None = None
+    if image is not None:
+        extension = IMAGE_EXTENSIONS.get(image.content_type or "")
+        if extension is None:
+            raise HTTPException(status_code=422, detail="Unsupported image type (png/jpg/webp)")
+        image_bytes = await image.read()
+        if len(image_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=413, detail="Image larger than 10 MB")
+
+    message = store.add_message(session, "user", content)
+
+    if image_bytes is not None:
+        uploads = store.session_dir(session_id) / "uploads"
+        uploads.mkdir(parents=True, exist_ok=True)
+        filename = f"msg_{message.id}{extension}"
+        (uploads / filename).write_bytes(image_bytes)
+        message.image_url = f"/api/sessions/{session_id}/uploads/{filename}"
+        store.save(session)
+
     job = jobs.create(session_id)
-    asyncio.create_task(_run_job(session, job, content))
+    asyncio.create_task(_run_job(session, job, content, image_bytes))
     return JobAcceptedOut(job_id=job.id)
 
 
-async def _run_job(session: Session, job: Job, content: str) -> None:
+async def _run_job(
+    session: Session, job: Job, content: str, image_bytes: bytes | None = None
+) -> None:
     async def emit(event: str, data: dict) -> None:
         await jobs.emit(job, event, data)
 
@@ -75,13 +107,16 @@ async def _run_job(session: Session, job: Job, content: str) -> None:
                 recent = [m.content for m in session.messages if m.role == "user"][-4:-1]
                 result = await generate_model(
                     previous_code=previous_code,
-                    instruction=content,
+                    instruction=content or None,
                     recent_context=recent,
+                    image_bytes=image_bytes,
                     out_dir=out_dir,
                     emit=emit,
                 )
             else:
-                result = await generate_model(request=content, out_dir=out_dir, emit=emit)
+                result = await generate_model(
+                    request=content or None, image_bytes=image_bytes, out_dir=out_dir, emit=emit
+                )
         except GenerationFailed as exc:
             shutil.rmtree(out_dir, ignore_errors=True)
             store.add_message(
@@ -135,6 +170,16 @@ async def get_model_glb(session_id: str, version: int):
     if not path.exists():
         raise HTTPException(status_code=404, detail="Model not found")
     return FileResponse(path, media_type="model/gltf-binary")
+
+
+@router.get("/{session_id}/uploads/{filename}")
+async def get_upload(session_id: str, filename: str):
+    _get_session_or_404(session_id)
+    uploads = store.session_dir(session_id) / "uploads"
+    path = (uploads / filename).resolve()
+    if uploads.resolve() not in path.parents or not path.exists():
+        raise HTTPException(status_code=404, detail="Upload not found")
+    return FileResponse(path)
 
 
 @router.get("/{session_id}/versions/{version}/code.py", response_class=PlainTextResponse)

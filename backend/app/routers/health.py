@@ -18,6 +18,7 @@ async def health():
             reachable=True,
             models=models,
             code_model_present=settings.model_code in models,
+            vision_model_present=settings.model_vision in models,
         )
     except Exception:
         pass

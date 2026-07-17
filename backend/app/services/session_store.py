@@ -26,6 +26,7 @@ class Message:
     content: str
     version: int | None = None
     error: bool = False
+    image_url: str | None = None
     created_at: str = field(default_factory=_now)
 
 
@@ -99,6 +100,7 @@ class SessionStore:
         content: str,
         version: int | None = None,
         error: bool = False,
+        image_url: str | None = None,
     ) -> Message:
         message = Message(
             id=len(session.messages) + 1,
@@ -106,6 +108,7 @@ class SessionStore:
             content=content,
             version=version,
             error=error,
+            image_url=image_url,
         )
         session.messages.append(message)
         self.save(session)

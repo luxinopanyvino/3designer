@@ -1,4 +1,4 @@
-import json
+﻿import json
 
 import pytest
 import trimesh
@@ -75,7 +75,7 @@ def test_health(client):
 def test_session_lifecycle(client, fake_generation):
     sid = client.post("/api/sessions").json()["id"]
 
-    r = client.post(f"/api/sessions/{sid}/messages", json={"content": "a box"})
+    r = client.post(f"/api/sessions/{sid}/messages", data={"content": "a box"})
     assert r.status_code == 202
     job_id = r.json()["job_id"]
 
@@ -102,7 +102,7 @@ def test_session_lifecycle(client, fake_generation):
 
 def test_unknown_session_404(client):
     assert client.get("/api/sessions/nope").status_code == 404
-    assert client.post("/api/sessions/nope/messages", json={"content": "x"}).status_code == 404
+    assert client.post("/api/sessions/nope/messages", data={"content": "x"}).status_code == 404
 
 
 def test_generation_failure_reported(client, monkeypatch):
@@ -113,7 +113,7 @@ def test_generation_failure_reported(client, monkeypatch):
     monkeypatch.setattr(sessions_router, "generate_model", failing_generate_model)
 
     sid = client.post("/api/sessions").json()["id"]
-    job_id = client.post(f"/api/sessions/{sid}/messages", json={"content": "impossible"}).json()["job_id"]
+    job_id = client.post(f"/api/sessions/{sid}/messages", data={"content": "impossible"}).json()["job_id"]
     with client.stream("GET", f"/api/sessions/{sid}/events", params={"job_id": job_id}) as s:
         events = _sse_events(s)
     assert events[-1][0] == "error"
