@@ -14,6 +14,7 @@ interface AppState {
   health: Health | null
   mode: Mode
   organicSizeMm: number
+  refreshHealth: () => Promise<void>
   init: () => Promise<void>
   newSession: () => Promise<void>
   sendMessage: (content: string, image?: File) => Promise<void>
@@ -23,6 +24,9 @@ interface AppState {
 }
 
 const SESSION_KEY = 'printcad-session-id'
+const HEALTH_POLL_MS = 10_000
+
+let healthTimer: number | undefined
 
 export const useAppStore = create<AppState>((set, get) => ({
   sessionId: null,
@@ -37,8 +41,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   mode: 'cad',
   organicSizeMm: 80,
 
+  refreshHealth: async () => {
+    try {
+      set({ health: await api.getHealth() })
+    } catch {
+      set({ health: null })
+    }
+  },
+
   init: async () => {
-    api.getHealth().then((health) => set({ health })).catch(() => set({ health: null }))
+    void get().refreshHealth()
+    window.clearInterval(healthTimer)
+    healthTimer = window.setInterval(() => void get().refreshHealth(), HEALTH_POLL_MS)
 
     const saved = localStorage.getItem(SESSION_KEY)
     if (saved) {
