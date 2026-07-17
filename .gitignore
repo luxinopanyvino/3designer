@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Runtime artifacts
+backend/data/
+*.stl
+*.step
+*.glb
+*.3mf
+
+# Node
+node_modules/
+dist/
+
+# Misc
+.env
+*.log
