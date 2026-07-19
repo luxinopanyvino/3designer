@@ -10,17 +10,17 @@ export interface Message {
 
 export interface Version {
   version: number
-  model_url: string
-  code_url: string
+  model_url: string | null
+  preview_url?: string | null
   dimensions_mm: { x: number; y: number; z: number }
   volume_mm3: number
   watertight: boolean
   warnings: string[]
-  source?: 'cad' | 'organic'
+  source?: string
   created_at: string
 }
 
-export type Mode = 'cad' | 'organic'
+export type Mode = 'organic' | 'sketch'
 
 export interface SessionData {
   id: string
@@ -34,7 +34,6 @@ export interface Health {
   ollama: {
     reachable: boolean
     models: string[]
-    code_model_present: boolean
     vision_model_present: boolean
   }
   organic_available: boolean
@@ -42,17 +41,10 @@ export interface Health {
   bed_size_mm: number
 }
 
-export type Stage =
-  | 'idle'
-  | 'vision_analyzing'
-  | 'llm_generating'
-  | 'executing'
-  | 'repairing'
-  | 'organic_generating'
+export type Stage = 'idle' | 'organic_generating' | 'vectorizing' | 'sketch_refining'
 
 export interface EventHandlers {
   onStatus: (stage: Stage, attempt: number) => void
-  onCodeDelta: (text: string) => void
-  onCompleted: (version: Version & { code: string }) => void
+  onCompleted: (version: Version) => void
   onError: (message: string, attempts: number) => void
 }

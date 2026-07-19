@@ -1,4 +1,4 @@
-"""Ollama client: prompt assembly, streaming chat, code extraction."""
+"""Ollama client: prompt loading, streaming chat, JSON extraction."""
 
 import json
 import re
@@ -10,7 +10,6 @@ from ollama import AsyncClient
 from app.config import settings
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
-CODE_BLOCK_RE = re.compile(r"```(?:python)?\s*\n(.*?)```", re.DOTALL)
 JSON_FENCE_RE = re.compile(r"```(?:json)?\s*\n(.*?)```", re.DOTALL)
 
 OnDelta = Callable[[str], Awaitable[None]]
@@ -18,14 +17,6 @@ OnDelta = Callable[[str], Awaitable[None]]
 
 def load_prompt(name: str) -> str:
     return (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
-
-
-def extract_code(text: str) -> str:
-    """Take the last fenced code block; fall back to the whole reply."""
-    blocks = CODE_BLOCK_RE.findall(text)
-    if blocks:
-        return blocks[-1].strip()
-    return text.strip()
 
 
 def extract_json(text: str) -> dict | None:
@@ -44,37 +35,10 @@ def extract_json(text: str) -> dict | None:
     return None
 
 
-def generate_messages(request: str) -> list[dict]:
-    return [
-        {"role": "system", "content": load_prompt("system_cadquery")},
-        {"role": "user", "content": load_prompt("generate").format(request=request)},
-    ]
-
-
-def refine_messages(previous_code: str, instruction: str, recent_context: list[str]) -> list[dict]:
-    context = "\n".join(f"- {m}" for m in recent_context) or "(none)"
-    return [
-        {"role": "system", "content": load_prompt("system_cadquery")},
-        {
-            "role": "user",
-            "content": load_prompt("refine").format(
-                previous_code=previous_code, instruction=instruction, context=context
-            ),
-        },
-    ]
-
-
-def repair_messages(code: str, error: str) -> list[dict]:
-    return [
-        {"role": "system", "content": load_prompt("system_cadquery")},
-        {"role": "user", "content": load_prompt("repair").format(code=code, error=error)},
-    ]
-
-
 class LLMService:
     def __init__(self, host: str | None = None, model: str | None = None):
         self.client = AsyncClient(host=host or settings.ollama_host)
-        self.model = model or settings.model_code
+        self.model = model or settings.model_vision
 
     async def chat_stream(
         self,
@@ -102,16 +66,20 @@ class LLMService:
                 await on_delta(token)
         return "".join(parts)
 
-    async def analyze_image(self, image_bytes: bytes) -> str:
-        """Describe a reference image as a structured design brief (JSON string).
+    async def analyze_sketch(
+        self, image_bytes: bytes, contours_json: str, prompt: str
+    ) -> str:
+        """Ask the vision model to clean up vectorized contours per the user's request.
 
-        Runs the vision model (Ollama swaps models in VRAM sequentially).
-        Falls back to the raw reply if the model didn't return valid JSON.
+        Returns the raw reply (a JSON string when the model behaved); the caller
+        parses it with extract_json and falls back to the CV contours on failure.
         """
         messages = [
             {
                 "role": "user",
-                "content": load_prompt("vision_analyze"),
+                "content": load_prompt("sketch_refine").format(
+                    contours=contours_json, instruction=prompt
+                ),
                 "images": [image_bytes],
             }
         ]

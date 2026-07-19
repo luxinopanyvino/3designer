@@ -37,7 +37,7 @@ class Version:
     volume_mm3: float
     watertight: bool
     warnings: list[str] = field(default_factory=list)
-    source: str = "cad"  # "cad" (parametric, has code+STEP) | "organic" (neural mesh)
+    source: str = "cad"  # "organic" (neural mesh) | "sketch" (2D DXF); legacy "cad" tolerated
     created_at: str = field(default_factory=_now)
 
 
@@ -130,11 +130,3 @@ class SessionStore:
 
     def next_version_number(self, session: Session) -> int:
         return len(session.versions) + 1
-
-    def latest_code(self, session: Session) -> str | None:
-        if not session.versions:
-            return None
-        code_path = self.version_dir(session.id, session.versions[-1].version) / "code.py"
-        if not code_path.exists():
-            return None
-        return code_path.read_text(encoding="utf-8")

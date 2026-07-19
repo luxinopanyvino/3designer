@@ -1,4 +1,4 @@
-import type { EventHandlers, Health, SessionData, Stage, Version } from './types'
+import type { EventHandlers, Health, Mode, SessionData, Stage, Version } from './types'
 
 const API = '/api'
 
@@ -26,20 +26,16 @@ export function getSession(id: string): Promise<SessionData> {
 export function postMessage(
   id: string,
   content: string,
-  image?: File,
-  mode: 'cad' | 'organic' = 'cad',
+  image: File,
+  mode: Mode,
   targetSizeMm?: number,
 ): Promise<{ job_id: string }> {
   const form = new FormData()
   form.append('content', content)
   form.append('mode', mode)
-  if (image) form.append('image', image)
+  form.append('image', image)
   if (targetSizeMm) form.append('target_size_mm', String(targetSizeMm))
   return request(`${API}/sessions/${id}/messages`, { method: 'POST', body: form })
-}
-
-export function getCode(codeUrl: string): Promise<string> {
-  return fetch(codeUrl).then((r) => r.text())
 }
 
 export function exportUrl(sessionId: string, format: string, version: number | 'latest' = 'latest'): string {
@@ -53,11 +49,8 @@ export function subscribeEvents(sessionId: string, jobId: string, handlers: Even
     const data = JSON.parse((e as MessageEvent).data)
     handlers.onStatus(data.stage as Stage, data.attempt)
   })
-  source.addEventListener('code_delta', (e) => {
-    handlers.onCodeDelta(JSON.parse((e as MessageEvent).data).text)
-  })
   source.addEventListener('completed', (e) => {
-    handlers.onCompleted(JSON.parse((e as MessageEvent).data) as Version & { code: string })
+    handlers.onCompleted(JSON.parse((e as MessageEvent).data) as Version)
     source.close()
   })
   source.addEventListener('error', (e) => {

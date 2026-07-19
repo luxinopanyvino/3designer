@@ -18,7 +18,6 @@ async def health():
         ollama = OllamaHealth(
             reachable=True,
             models=models,
-            code_model_present=settings.model_code in models,
             vision_model_present=settings.model_vision in models,
         )
     except Exception:
@@ -28,6 +27,6 @@ async def health():
         status="ok",
         ollama=ollama,
         organic_available=await organic_service_healthy(),
-        export_formats=supported_export_formats(),
+        export_formats=supported_export_formats() + ["dxf", "svg"],
         bed_size_mm=settings.bed_size_mm,
     )

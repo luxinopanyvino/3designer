@@ -1,81 +1,31 @@
-﻿import json
+import io
 
-import pytest
-import trimesh
-from fastapi.testclient import TestClient
-
-from app import deps
-from app.main import app
-from app.routers import sessions as sessions_router
-from app.services.generation import GenerationFailed, GenerationResult
-from app.services.mesh_service import MeshInfo
-from app.services.session_store import SessionStore
+from tests.conftest import PNG_1PX, _sse_events
 
 
-@pytest.fixture()
-def client(tmp_path, monkeypatch):
-    fresh_store = SessionStore(tmp_path)
-    monkeypatch.setattr(deps, "store", fresh_store)
-    monkeypatch.setattr(sessions_router, "store", fresh_store)
-    import app.routers.export as export_router
-
-    monkeypatch.setattr(export_router, "store", fresh_store)
-    with TestClient(app) as c:
-        yield c
-
-
-@pytest.fixture()
-def fake_generation(monkeypatch):
-    """Replace the LLM+CAD pipeline with a stub that writes real (tiny) files."""
-
-    async def fake_generate_model(*, out_dir, emit, **kwargs):
-        out_dir.mkdir(parents=True, exist_ok=True)
-        mesh = trimesh.creation.box(extents=(30, 20, 10))
-        stl, step, glb = out_dir / "model.stl", out_dir / "model.step", out_dir / "model.glb"
-        mesh.export(stl)
-        step.write_text("fake step", encoding="utf-8")
-        glb.write_bytes(mesh.export(file_type="glb"))
-        (out_dir / "code.py").write_text("result = None", encoding="utf-8")
-        await emit("status", {"stage": "llm_generating", "attempt": 1})
-        await emit("code_delta", {"text": "result = None"})
-        await emit("status", {"stage": "executing", "attempt": 1})
-        return GenerationResult(
-            code="result = None",
-            mesh_info=MeshInfo(
-                dimensions_mm={"x": 30.0, "y": 20.0, "z": 10.0},
-                volume_mm3=6000.0,
-                watertight=True,
-                warnings=[],
-            ),
-            stl_path=stl,
-            step_path=step,
-            glb_path=glb,
-        )
-
-    monkeypatch.setattr(sessions_router, "generate_model", fake_generate_model)
-
-
-def _sse_events(response):
-    events = []
-    current = None
-    for line in response.iter_lines():
-        if line.startswith("event:"):
-            current = line.split(":", 1)[1].strip()
-        elif line.startswith("data:") and current:
-            events.append((current, json.loads(line.split(":", 1)[1])))
-    return events
+def _post_organic(client, sid, content="", target_size_mm=None):
+    data = {"content": content, "mode": "organic"}
+    if target_size_mm is not None:
+        data["target_size_mm"] = target_size_mm
+    return client.post(
+        f"/api/sessions/{sid}/messages",
+        data=data,
+        files={"image": ("ref.png", io.BytesIO(PNG_1PX), "image/png")},
+    )
 
 
 def test_health(client):
     body = client.get("/api/health").json()
     assert body["status"] == "ok"
     assert "stl" in body["export_formats"]
+    assert "dxf" in body["export_formats"]
+    assert "step" not in body["export_formats"]
 
 
-def test_session_lifecycle(client, fake_generation):
+def test_session_lifecycle(client, fake_organic_service):
     sid = client.post("/api/sessions").json()["id"]
 
-    r = client.post(f"/api/sessions/{sid}/messages", data={"content": "a box"})
+    r = _post_organic(client, sid, content="una figura", target_size_mm="50")
     assert r.status_code == 202
     job_id = r.json()["job_id"]
 
@@ -85,8 +35,9 @@ def test_session_lifecycle(client, fake_generation):
     assert names[-1] == "completed"
     completed = events[-1][1]
     assert completed["version"] == 1
-    assert completed["dimensions_mm"]["x"] == 30.0
+    assert completed["source"] == "organic"
     assert completed["model_url"].endswith("/versions/1/model.glb")
+    assert completed["preview_url"] is None
 
     session = client.get(f"/api/sessions/{sid}").json()
     assert [m["role"] for m in session["messages"]] == ["user", "assistant"]
@@ -102,23 +53,32 @@ def test_session_lifecycle(client, fake_generation):
 
 def test_unknown_session_404(client):
     assert client.get("/api/sessions/nope").status_code == 404
-    assert client.post("/api/sessions/nope/messages", data={"content": "x"}).status_code == 404
+    r = client.post("/api/sessions/nope/messages", data={"content": "x", "mode": "organic"})
+    assert r.status_code == 404
 
 
-def test_generation_failure_reported(client, monkeypatch):
-    async def failing_generate_model(*, out_dir, emit, **kwargs):
-        await emit("status", {"stage": "llm_generating", "attempt": 1})
-        raise GenerationFailed("Could not build", attempts=3, last_error="boom")
-
-    monkeypatch.setattr(sessions_router, "generate_model", failing_generate_model)
-
+def test_invalid_mode_rejected(client):
     sid = client.post("/api/sessions").json()["id"]
-    job_id = client.post(f"/api/sessions/{sid}/messages", data={"content": "impossible"}).json()["job_id"]
-    with client.stream("GET", f"/api/sessions/{sid}/events", params={"job_id": job_id}) as s:
-        events = _sse_events(s)
-    assert events[-1][0] == "error"
-    assert events[-1][1]["attempts"] == 3
+    r = client.post(
+        f"/api/sessions/{sid}/messages",
+        data={"content": "una caja", "mode": "cad"},
+        files={"image": ("ref.png", io.BytesIO(PNG_1PX), "image/png")},
+    )
+    assert r.status_code == 422
 
-    session = client.get(f"/api/sessions/{sid}").json()
-    assert session["messages"][-1]["error"] is True
-    assert session["versions"] == []
+
+def test_missing_mode_rejected(client):
+    sid = client.post("/api/sessions").json()["id"]
+    r = client.post(
+        f"/api/sessions/{sid}/messages",
+        data={"content": "una caja"},
+        files={"image": ("ref.png", io.BytesIO(PNG_1PX), "image/png")},
+    )
+    assert r.status_code == 422
+
+
+def test_image_required_in_both_modes(client):
+    sid = client.post("/api/sessions").json()["id"]
+    for mode in ("organic", "sketch"):
+        r = client.post(f"/api/sessions/{sid}/messages", data={"content": "x", "mode": mode})
+        assert r.status_code == 422

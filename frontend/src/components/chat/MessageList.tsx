@@ -16,13 +16,20 @@ export default function MessageList() {
     <div className="message-list">
       {messages.length === 0 && !busy && (
         <div className="empty-hint">
-          <p>Describe la pieza que quieres imprimir. Por ejemplo:</p>
+          <p>Adjunta una foto (📷) y elige modo:</p>
           <ul>
-            <li>"una caja de 80x60x30 mm con tapa y paredes de 2 mm"</li>
-            <li>"un soporte en L con dos agujeros M4"</li>
-            <li>"un gancho de pared para auriculares"</li>
+            <li>
+              <strong>🗿 3D (foto)</strong>: reconstrucción neuronal del objeto → malla imprimible
+              (STL/3MF)
+            </li>
+            <li>
+              <strong>📐 2D DXF</strong>: contornos de una pieza plana → plano vectorial (DXF/SVG)
+            </li>
           </ul>
-          <p>Luego refínala: "hazla 10 mm más ancha", "añade agujeros M3"…</p>
+          <p>
+            Opcional: indica la medida real en el texto ("altura 120 mm", "ancho 6 cm") o pide
+            limpieza en 2D ("solo el contorno exterior").
+          </p>
         </div>
       )}
       {messages.map((m) => (

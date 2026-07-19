@@ -1,7 +1,6 @@
 import pytest
 import trimesh
 
-from app.services.cad_executor import execute_cad_code
 from app.services.mesh_service import (
     DegenerateMeshError,
     analyze_stl,
@@ -9,25 +8,15 @@ from app.services.mesh_service import (
     supported_export_formats,
 )
 
-BOX_CODE = "import cadquery as cq\nresult = cq.Workplane('XY').box(30, 20, 10, centered=(True, True, False))"
-
-T_SHAPE_CODE = """
-import cadquery as cq
-# 60mm horizontal bar on top of a thin column: big flat overhangs
-result = (
-    cq.Workplane("XY")
-    .box(6, 6, 30, centered=(True, True, False))
-    .union(cq.Workplane("XY", origin=(0, 0, 30)).box(60, 20, 6, centered=(True, True, False)))
-)
-"""
-
 
 @pytest.fixture(scope="module")
 def box_stl(tmp_path_factory):
     out = tmp_path_factory.mktemp("box")
-    res = execute_cad_code(BOX_CODE, out, timeout_s=90)
-    assert res.ok, res.error
-    return res.stl_path
+    stl = out / "model.stl"
+    box = trimesh.creation.box(extents=(30, 20, 10))
+    box.apply_translation([0, 0, 5])  # rest on the bed (z >= 0)
+    box.export(stl)
+    return stl
 
 
 def test_analyze_box(box_stl):
@@ -44,9 +33,15 @@ def test_bed_overflow_warning(box_stl):
 
 
 def test_overhang_warning(tmp_path):
-    res = execute_cad_code(T_SHAPE_CODE, tmp_path, timeout_s=90)
-    assert res.ok, res.error
-    info = analyze_stl(res.stl_path)
+    # 60mm horizontal bar on top of a thin column: big flat overhangs
+    column = trimesh.creation.box(extents=(6, 6, 30))
+    column.apply_translation([0, 0, 15])
+    bar = trimesh.creation.box(extents=(60, 20, 6))
+    bar.apply_translation([0, 0, 33])
+    stl = tmp_path / "t_shape.stl"
+    trimesh.util.concatenate([column, bar]).export(stl)
+
+    info = analyze_stl(stl)
     assert any("overhang" in w for w in info.warnings)
 
 
@@ -70,4 +65,5 @@ def test_glb_conversion(box_stl, tmp_path):
 
 def test_supported_formats_contract():
     formats = supported_export_formats()
-    assert "stl" in formats and "step" in formats
+    assert "stl" in formats
+    assert "step" not in formats

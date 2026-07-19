@@ -196,34 +196,11 @@ body {
   margin-top: 8px;
 }
 
-.code-block {
-  background: #0c0e12;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-  font-family: var(--mono);
-  font-size: 12px;
-  overflow-x: auto;
-  max-height: 260px;
-  overflow-y: auto;
-  margin: 8px 0 0;
-  white-space: pre;
-}
-
-.code-block.streaming {
-  max-height: 180px;
-}
-
 .status-row {
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--text-dim);
-}
-
-.attempt {
-  font-size: 12px;
-  color: var(--warn);
 }
 
 .spinner {
@@ -324,6 +301,16 @@ body {
   border-color: #9d7bd8;
 }
 
+.badge.sketch {
+  color: #5bb8d8;
+  border-color: #5bb8d8;
+}
+
+.banner.soft {
+  background: #1f232b;
+  color: var(--text-dim);
+}
+
 button.attach {
   padding: 8px 10px;
   font-size: 16px;
@@ -391,6 +378,22 @@ button.small {
 .viewer-canvas {
   position: absolute !important;
   inset: 0;
+}
+
+.sketch-viewer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e9ebee;
+  padding: 40px;
+}
+
+.sketch-viewer img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
 }
 
 .dimensions-overlay {

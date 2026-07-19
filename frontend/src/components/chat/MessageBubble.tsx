@@ -1,5 +1,3 @@
-import { useState } from 'react'
-import { getCode } from '../../api/client'
 import type { Message } from '../../api/types'
 import { useAppStore } from '../../store/useAppStore'
 
@@ -7,8 +5,6 @@ export default function MessageBubble({ message }: { message: Message }) {
   const versions = useAppStore((s) => s.versions)
   const currentVersion = useAppStore((s) => s.currentVersion)
   const setCurrentVersion = useAppStore((s) => s.setCurrentVersion)
-  const [code, setCode] = useState<string | null>(null)
-  const [showCode, setShowCode] = useState(false)
 
   const version = message.version != null ? versions.find((v) => v.version === message.version) : undefined
 
@@ -21,12 +17,7 @@ export default function MessageBubble({ message }: { message: Message }) {
     )
   }
 
-  const toggleCode = async () => {
-    if (!showCode && code === null && version) {
-      setCode(await getCode(version.code_url))
-    }
-    setShowCode(!showCode)
-  }
+  const isSketch = version?.source === 'sketch'
 
   return (
     <div className={`bubble assistant ${message.error ? 'error' : ''}`}>
@@ -35,12 +26,17 @@ export default function MessageBubble({ message }: { message: Message }) {
         <div className="version-card">
           <div className="version-meta">
             <span className="dims">
-              {version.dimensions_mm.x} × {version.dimensions_mm.y} × {version.dimensions_mm.z} mm
+              {isSketch
+                ? `${version.dimensions_mm.x} × ${version.dimensions_mm.y} mm`
+                : `${version.dimensions_mm.x} × ${version.dimensions_mm.y} × ${version.dimensions_mm.z} mm`}
             </span>
-            <span className={`badge ${version.watertight ? 'ok' : 'warn'}`}>
-              {version.watertight ? 'estanco' : 'no estanco'}
-            </span>
+            {!isSketch && (
+              <span className={`badge ${version.watertight ? 'ok' : 'warn'}`}>
+                {version.watertight ? 'estanco' : 'no estanco'}
+              </span>
+            )}
             {version.source === 'organic' && <span className="badge organic">orgánico</span>}
+            {isSketch && <span className="badge sketch">2D</span>}
           </div>
           {version.warnings.map((w, i) => (
             <div key={i} className="warning">⚠ {w}</div>
@@ -51,13 +47,7 @@ export default function MessageBubble({ message }: { message: Message }) {
                 Ver v{version.version}
               </button>
             )}
-            {version.source !== 'organic' && (
-              <button className="ghost small" onClick={() => void toggleCode()}>
-                {showCode ? 'Ocultar código' : 'Ver código'}
-              </button>
-            )}
           </div>
-          {showCode && code && <pre className="code-block">{code}</pre>}
         </div>
       )}
     </div>

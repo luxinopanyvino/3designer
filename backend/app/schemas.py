@@ -13,8 +13,8 @@ class MessageOut(BaseModel):
 
 class VersionOut(BaseModel):
     version: int
-    model_url: str
-    code_url: str
+    model_url: str | None = None
+    preview_url: str | None = None
     dimensions_mm: dict[str, float]
     volume_mm3: float
     watertight: bool
@@ -42,7 +42,6 @@ class JobAcceptedOut(BaseModel):
 class OllamaHealth(BaseModel):
     reachable: bool
     models: list[str] = []
-    code_model_present: bool = False
     vision_model_present: bool = False
 
 

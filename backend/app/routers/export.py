@@ -4,14 +4,21 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response
 
 from app.deps import store
-from app.services.mesh_service import convert_stl_to_3mf, supported_export_formats
+from app.services.mesh_service import convert_stl_to_3mf
 
 router = APIRouter(prefix="/sessions", tags=["export"])
 
 MEDIA_TYPES = {
     "stl": "model/stl",
-    "step": "application/step",
     "3mf": "model/3mf",
+    "dxf": "application/dxf",
+    "svg": "image/svg+xml",
+}
+
+FILENAMES = {
+    "stl": "model.stl",
+    "dxf": "model.dxf",
+    "svg": "preview.svg",
 }
 
 
@@ -22,7 +29,7 @@ async def export_model(session_id: str, format: str = "stl", version: str = "lat
         raise HTTPException(status_code=404, detail="Session not found")
     if not session.versions:
         raise HTTPException(status_code=404, detail="No model generated yet")
-    if format not in supported_export_formats():
+    if format not in MEDIA_TYPES:
         raise HTTPException(status_code=422, detail=f"Unsupported format '{format}'")
 
     number = session.versions[-1].version if version == "latest" else int(version)
@@ -40,7 +47,7 @@ async def export_model(session_id: str, format: str = "stl", version: str = "lat
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
-    path = vdir / f"model.{format}"
+    path = vdir / FILENAMES[format]
     if not path.exists():
         raise HTTPException(status_code=404, detail="Version files not found")
     return FileResponse(path, media_type=MEDIA_TYPES[format], filename=filename)

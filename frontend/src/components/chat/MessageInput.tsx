@@ -8,13 +8,11 @@ export default function MessageInput() {
   const fileRef = useRef<HTMLInputElement>(null)
   const busy = useAppStore((s) => s.busy)
   const sendMessage = useAppStore((s) => s.sendMessage)
-  const hasModel = useAppStore((s) => s.versions.length > 0)
-  const visionAvailable = useAppStore((s) => s.health?.ollama.vision_model_present ?? true)
   const mode = useAppStore((s) => s.mode)
   const setMode = useAppStore((s) => s.setMode)
   const organicAvailable = useAppStore((s) => s.health?.organic_available ?? false)
-  const organicSizeMm = useAppStore((s) => s.organicSizeMm)
-  const setOrganicSizeMm = useAppStore((s) => s.setOrganicSizeMm)
+  const sizeMm = useAppStore((s) => s.sizeMm)
+  const setSizeMm = useAppStore((s) => s.setSizeMm)
 
   useEffect(() => {
     if (!image) {
@@ -26,7 +24,7 @@ export default function MessageInput() {
     return () => URL.revokeObjectURL(url)
   }, [image])
 
-  const canSend = mode === 'organic' ? image !== null : value.trim() !== '' || image !== null
+  const canSend = image !== null
 
   const send = () => {
     if (!canSend || busy) return
@@ -40,37 +38,35 @@ export default function MessageInput() {
     <div className="message-input-wrap">
       <div className="mode-toggle">
         <button
-          className={`mode-option ${mode === 'cad' ? 'active' : ''}`}
-          onClick={() => setMode('cad')}
-          title="Piezas funcionales: código CAD paramétrico, editable por chat, export STEP"
-        >
-          ⚙ Funcional (CAD)
-        </button>
-        <button
           className={`mode-option ${mode === 'organic' ? 'active' : ''}`}
           disabled={!organicAvailable}
           onClick={() => setMode('organic')}
           title={
             organicAvailable
-              ? 'Formas orgánicas: reconstrucción neuronal desde una foto (TRELLIS)'
-              : 'Servicio orgánico no disponible — arranca organic/ (uv run uvicorn service:app --port 8001)'
+              ? 'Foto → malla 3D imprimible (reconstrucción neuronal TRELLIS)'
+              : 'Servicio 3D no disponible — arranca organic/ (uv run uvicorn service:app --port 8001)'
           }
         >
-          🗿 Orgánico (foto)
+          🗿 3D (foto)
         </button>
-        {mode === 'organic' && (
-          <label className="size-input">
-            tamaño
-            <input
-              type="number"
-              min={5}
-              max={220}
-              value={organicSizeMm}
-              onChange={(e) => setOrganicSizeMm(Number(e.target.value) || 80)}
-            />
-            mm
-          </label>
-        )}
+        <button
+          className={`mode-option ${mode === 'sketch' ? 'active' : ''}`}
+          onClick={() => setMode('sketch')}
+          title="Foto de una pieza plana → contornos vectorizados en DXF"
+        >
+          📐 2D DXF
+        </button>
+        <label className="size-input">
+          {mode === 'organic' ? 'tamaño' : 'ancho'}
+          <input
+            type="number"
+            min={5}
+            max={220}
+            value={sizeMm}
+            onChange={(e) => setSizeMm(Number(e.target.value) || 80)}
+          />
+          mm
+        </label>
       </div>
       {preview && (
         <div className="image-preview">
@@ -90,12 +86,8 @@ export default function MessageInput() {
         />
         <button
           className="ghost attach"
-          disabled={busy || !visionAvailable}
-          title={
-            visionAvailable
-              ? 'Adjuntar imagen de referencia'
-              : 'Modelo de visión no disponible (ollama pull qwen3-vl:8b)'
-          }
+          disabled={busy}
+          title="Adjuntar la foto (obligatoria en ambos modos)"
           onClick={() => fileRef.current?.click()}
         >
           📷
@@ -111,12 +103,8 @@ export default function MessageInput() {
           }}
           placeholder={
             mode === 'organic'
-              ? 'Adjunta una foto del objeto (el texto es opcional)…'
-              : image
-                ? 'Añade dimensiones reales… (p. ej. "el ancho real es 60 mm")'
-                : hasModel
-                  ? 'Refina el modelo… (p. ej. "hazlo 10 mm más ancho")'
-                  : 'Describe la pieza a imprimir o adjunta una foto…'
+              ? 'Adjunta una foto del objeto; opcional: "altura 120 mm"…'
+              : 'Adjunta una foto de la pieza plana; opcional: "ancho 50 mm", "solo contorno exterior"…'
           }
           rows={2}
           disabled={busy}

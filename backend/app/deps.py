@@ -8,6 +8,8 @@ store = SessionStore(settings.data_dir)
 jobs = JobManager()
 
 
-def version_urls(session_id: str, version: int) -> dict[str, str]:
+def version_urls(session_id: str, version: int, source: str = "cad") -> dict[str, str | None]:
     base = f"/api/sessions/{session_id}/versions/{version}"
-    return {"model_url": f"{base}/model.glb", "code_url": f"{base}/code.py"}
+    if source == "sketch":
+        return {"model_url": None, "preview_url": f"{base}/preview.svg"}
+    return {"model_url": f"{base}/model.glb", "preview_url": None}
