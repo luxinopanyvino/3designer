@@ -1,7 +1,6 @@
 """Mesh analysis and STL->GLB conversion with trimesh.
 
-Degenerate geometry raises DegenerateMeshError, which the generation loop
-treats as a repairable error (fed back to the LLM). Printability issues that
+Degenerate geometry raises DegenerateMeshError. Printability issues that
 are still valid models (bed overflow, steep overhangs) become warnings.
 """
 
@@ -108,7 +107,7 @@ def convert_stl_to_3mf(stl_path: Path) -> bytes:
 
 
 def supported_export_formats() -> list[str]:
-    formats = ["stl", "step"]
+    formats = ["stl"]
     try:
         trimesh.creation.box(extents=(1, 1, 1)).export(file_obj=io.BytesIO(), file_type="3mf")
         formats.append("3mf")

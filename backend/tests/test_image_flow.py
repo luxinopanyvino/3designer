@@ -1,15 +1,10 @@
 import io
 
-import pytest
+import trimesh
 
+from app.services import organic
 from app.services.llm import extract_json
-from tests.test_api import _sse_events, client, fake_generation  # noqa: F401
-
-PNG_1PX = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-    b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0"
-    b"\x00\x00\x00\x03\x00\x01\x87\xa1N\xe8\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+from tests.conftest import PNG_1PX, _sse_events
 
 
 def test_extract_json_fenced():
@@ -27,22 +22,19 @@ def test_extract_json_invalid_returns_none():
     assert extract_json("no json here") is None
 
 
-def test_image_upload_creates_message_with_url(client, fake_generation, monkeypatch):  # noqa: F811
-    from app.routers import sessions as sessions_router
-
+def test_image_upload_creates_message_with_url(client, monkeypatch):
     captured = {}
-    original = sessions_router.generate_model
 
-    async def spying_generate_model(**kwargs):
-        captured["image_bytes"] = kwargs.get("image_bytes")
-        return await original(**kwargs)
+    async def spying_request(image_bytes: bytes) -> bytes:
+        captured["image_bytes"] = image_bytes
+        return trimesh.creation.icosphere(subdivisions=2, radius=1.0).export(file_type="stl")
 
-    monkeypatch.setattr(sessions_router, "generate_model", spying_generate_model)
+    monkeypatch.setattr(organic, "request_organic_mesh", spying_request)
 
     sid = client.post("/api/sessions").json()["id"]
     r = client.post(
         f"/api/sessions/{sid}/messages",
-        data={"content": "una arandela de 30 mm"},
+        data={"content": "una figura de 30 mm", "mode": "organic"},
         files={"image": ("ref.png", io.BytesIO(PNG_1PX), "image/png")},
     )
     assert r.status_code == 202
@@ -60,25 +52,29 @@ def test_image_upload_creates_message_with_url(client, fake_generation, monkeypa
     assert img.status_code == 200 and img.content == PNG_1PX
 
 
-def test_image_only_message_allowed(client, fake_generation):  # noqa: F811
+def test_image_only_message_allowed(client, fake_organic_service):
     sid = client.post("/api/sessions").json()["id"]
     r = client.post(
         f"/api/sessions/{sid}/messages",
+        data={"mode": "organic"},
         files={"image": ("ref.png", io.BytesIO(PNG_1PX), "image/png")},
     )
     assert r.status_code == 202
 
 
-def test_empty_message_rejected(client):  # noqa: F811
+def test_text_without_image_rejected(client):
     sid = client.post("/api/sessions").json()["id"]
-    assert client.post(f"/api/sessions/{sid}/messages", data={"content": "  "}).status_code == 422
+    r = client.post(
+        f"/api/sessions/{sid}/messages", data={"content": "solo texto", "mode": "organic"}
+    )
+    assert r.status_code == 422
 
 
-def test_unsupported_image_type_rejected(client):  # noqa: F811
+def test_unsupported_image_type_rejected(client):
     sid = client.post("/api/sessions").json()["id"]
     r = client.post(
         f"/api/sessions/{sid}/messages",
-        data={"content": "x"},
+        data={"content": "x", "mode": "organic"},
         files={"image": ("evil.exe", io.BytesIO(b"MZ"), "application/octet-stream")},
     )
     assert r.status_code == 422

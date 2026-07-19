@@ -1,6 +1,7 @@
 import { useAppStore } from '../../store/useAppStore'
 import ExportMenu from '../ExportMenu'
 import DimensionsOverlay from './DimensionsOverlay'
+import SketchViewer from './SketchViewer'
 import Viewer from './Viewer'
 
 export default function ViewerPanel() {
@@ -10,7 +11,11 @@ export default function ViewerPanel() {
 
   return (
     <section className="viewer-panel">
-      <Viewer modelUrl={version?.model_url ?? null} />
+      {version?.source === 'sketch' ? (
+        <SketchViewer version={version} />
+      ) : (
+        <Viewer modelUrl={version?.model_url ?? null} />
+      )}
       {version && <DimensionsOverlay version={version} />}
       <ExportMenu />
     </section>

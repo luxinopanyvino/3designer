@@ -10,17 +10,16 @@ interface AppState {
   busy: boolean
   stage: Stage
   attempt: number
-  streamedCode: string
   health: Health | null
   mode: Mode
-  organicSizeMm: number
+  sizeMm: number
   refreshHealth: () => Promise<void>
   init: () => Promise<void>
   newSession: () => Promise<void>
   sendMessage: (content: string, image?: File) => Promise<void>
   setCurrentVersion: (v: number) => void
   setMode: (mode: Mode) => void
-  setOrganicSizeMm: (mm: number) => void
+  setSizeMm: (mm: number) => void
 }
 
 const SESSION_KEY = 'printcad-session-id'
@@ -36,10 +35,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   busy: false,
   stage: 'idle',
   attempt: 1,
-  streamedCode: '',
   health: null,
-  mode: 'cad',
-  organicSizeMm: 80,
+  mode: 'organic',
+  sizeMm: 80,
 
   refreshHealth: async () => {
     try {
@@ -82,20 +80,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       currentVersion: null,
       busy: false,
       stage: 'idle',
-      streamedCode: '',
     })
   },
 
   sendMessage: async (content: string, image?: File) => {
-    const { sessionId, busy, mode, organicSizeMm } = get()
-    if (!sessionId || busy || (!content.trim() && !image)) return
-    if (mode === 'organic' && !image) return
+    const { sessionId, busy, mode, sizeMm } = get()
+    if (!sessionId || busy || !image) return
 
     set((s) => ({
       busy: true,
-      stage: mode === 'organic' ? 'organic_generating' : image ? 'vision_analyzing' : 'llm_generating',
+      stage: mode === 'organic' ? 'organic_generating' : 'vectorizing',
       attempt: 1,
-      streamedCode: '',
       messages: [
         ...s.messages,
         {
@@ -104,7 +99,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           content,
           version: null,
           error: false,
-          image_url: image ? URL.createObjectURL(image) : null,
+          image_url: URL.createObjectURL(image),
           created_at: new Date().toISOString(),
         },
       ],
@@ -120,16 +115,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     try {
-      const { job_id } = await api.postMessage(
-        sessionId,
-        content,
-        image,
-        mode,
-        mode === 'organic' ? organicSizeMm : undefined,
-      )
+      const { job_id } = await api.postMessage(sessionId, content, image, mode, sizeMm)
       api.subscribeEvents(sessionId, job_id, {
         onStatus: (stage, attempt) => set({ stage, attempt }),
-        onCodeDelta: (text) => set((s) => ({ streamedCode: s.streamedCode + text })),
         onCompleted: async (version) => {
           await refreshSession()
           set({ busy: false, stage: 'idle', currentVersion: version.version })
@@ -160,5 +148,5 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setCurrentVersion: (v: number) => set({ currentVersion: v }),
   setMode: (mode: Mode) => set({ mode }),
-  setOrganicSizeMm: (mm: number) => set({ organicSizeMm: mm }),
+  setSizeMm: (mm: number) => set({ sizeMm: mm }),
 }))

@@ -1,19 +1,20 @@
-# PrintCAD — diseño 3D imprimible con IA local
+# PrintCAD — de una foto a pieza 3D imprimible o plano 2D DXF
 
-Herramienta web para diseñar piezas de impresión 3D a partir de prompts en lenguaje natural o fotos de referencia, usando modelos locales de Ollama. El LLM genera código [CadQuery](https://cadquery.readthedocs.io/) paramétrico que se ejecuta en un sandbox y produce sólidos exactos y estancos, listos para el slicer.
+Herramienta web local con dos casos de uso, ambos a partir de una imagen (+ prompt opcional):
 
 ```
-Prompt ──► qwen2.5-coder:14b (Ollama) ──► código CadQuery ──► sandbox ──► STL/STEP/GLB
-  ▲                                                                          │
-  └── "hazlo 10 mm más ancho" (el código es la fuente de verdad) ◄── visor 3D
+Foto ──► 🗿 3D  ──► TRELLIS (reconstrucción neuronal) ──► reparación de malla ──► STL/3MF
+Foto ──► 📐 2D  ──► OpenCV (contornos + agujeros) ──► DXF (ezdxf) + preview SVG
+                    └── prompt opcional: medida real ("ancho 60 mm") y limpieza con IA
 ```
 
 ## Requisitos
 
 - Windows (probado en Windows 11) · [uv](https://docs.astral.sh/uv/) · Node 20+
-- [Ollama](https://ollama.com) con el modelo de código: `ollama pull qwen2.5-coder:14b` (~9 GB, cabe en 16 GB de VRAM)
-- Opcional, para imagen→CAD: `ollama pull qwen3-vl:8b` (Ollama alterna ambos modelos en VRAM automáticamente)
-- Opcional, para el modo orgánico (foto → malla neuronal): ver [organic/README.md](organic/README.md) (PyTorch cu128, ~6 GB)
+- Para el modo 3D: el servicio orgánico de `organic/` (PyTorch cu128, ~6 GB) — ver [organic/README.md](organic/README.md)
+- Opcional, para la limpieza 2D por prompt: [Ollama](https://ollama.com) con `ollama pull qwen3-vl:8b`
+
+El modo 2D no necesita ningún servicio externo: es OpenCV puro salvo que el prompt pida limpieza con IA.
 
 ## Arranque
 
@@ -27,7 +28,7 @@ cd frontend
 npm install
 npm run dev        # abre http://localhost:5173
 
-# Terminal 3 (opcional) — servicio orgánico, tras el setup de organic/README.md
+# Terminal 3 (solo para modo 3D) — servicio orgánico, tras el setup de organic/README.md
 cd organic
 uv run uvicorn service:app --port 8001
 ```
@@ -36,50 +37,44 @@ O todo a la vez con `script.bat` desde la raíz.
 
 ## Uso
 
-1. Describe la pieza: *"una caja de 80x60x30 mm con paredes de 2 mm"*.
-2. El modelo aparece en el visor (cama de 220×220 mm, 1 unidad = 1 mm) con dimensiones, volumen y avisos de imprimibilidad (estanqueidad, voladizos >45°, tamaño de cama).
-3. Refínalo por chat: *"hazla 10 mm más ancha"*, *"añade dos agujeros M3 separados 20 mm"*. Cada iteración crea una versión nueva; el código CadQuery es siempre la fuente de verdad ("Ver código" en cada resultado).
-4. Exporta STL (binario) o STEP (B-rep exacto) con los botones del visor.
-5. **Imagen → CAD**: adjunta una foto de una pieza con el botón 📷; `qwen3-vl:8b` la analiza y extrae un brief estructurado (tipo de pieza, agujeros, proporciones) que alimenta la generación. Tu texto aporta las dimensiones reales: *"la pieza de la foto, diámetro exterior 30 mm"*.
-6. **Modo orgánico** (🗿, requiere el servicio de `organic/`): para figuras/esculturas que el CAD paramétrico no puede expresar. Adjunta una foto y elige el tamaño (mm del eje mayor); TRELLIS (Microsoft) reconstruye la malla y el backend la repara (componente mayor, agujeros, normales) y la apoya en la cama. Exporta STL/3MF — no hay STEP ni "Ver código": una malla neuronal no tiene B-rep.
+1. Adjunta una foto (📷) — obligatoria en ambos modos — y elige el modo.
+2. **🗿 3D (foto)**: para figuras y objetos con volumen. TRELLIS reconstruye la malla; el backend la repara (componente mayor, agujeros, normales) y la apoya en la cama. El tamaño sale del campo "tamaño", o del texto (*"altura 120 mm"*), o de 80 mm por defecto. Exporta STL o 3MF — no hay B-rep ni código.
+3. **📐 2D DXF**: para piezas planas (soportes, juntas, plantillas para corte). OpenCV vectoriza el contorno exterior y los agujeros; el resultado se ve como plano 2D en el visor y se exporta como DXF (mm, listo para CAD/láser) o SVG. El texto opcional fija la medida real (*"ancho 60 mm"*) y puede pedir limpieza con IA (*"solo el contorno exterior"*, *"redondea"*) — si qwen3-vl no está disponible o falla, se usa el contorno vectorizado tal cual con un aviso.
+4. Cada generación crea una versión nueva en la sesión; los datos viven en `backend/data/sessions/{id}/` y sobreviven reinicios.
 
-Prueba sin frontend:
-
-```powershell
-cd backend
-uv run python scripts\cli_generate.py "una escuadra en L con dos agujeros M4"
-```
+> Sesiones antiguas del modo CAD paramétrico (eliminado): sus versiones siguen viéndose y exportando STL/3MF, pero ya no hay export STEP ni "Ver código". Vacía `backend/data/sessions` si quieres empezar de cero.
 
 ## Arquitectura
 
 | Componente | Descripción |
 |---|---|
-| `backend/app/services/generation.py` | Orquestador: LLM → chequeo AST → sandbox → validación de malla, con bucle de autocorrección (3 intentos; el traceback vuelve al LLM) |
-| `backend/app/sandbox/runner.py` | Subprocess aislado con timeout: ejecuta el código generado, exporta STL/STEP |
-| `backend/app/services/code_safety.py` | Allowlist AST: solo `cadquery`, `math`, `numpy`; sin I/O ni acceso al sistema |
-| `backend/app/services/mesh_service.py` | trimesh: STL→GLB para el visor, watertight, dimensiones, voladizos |
-| `backend/app/prompts/` | Prompt del sistema con few-shots + chuleta CadQuery; plantillas generate/refine/repair |
-| `backend/app/routers/` | FastAPI: sesiones, SSE de progreso, export, health |
+| `backend/app/services/sketch.py` | Pipeline 2D: OpenCV (Otsu + contornos RETR_CCOMP + simplificación) → escala en mm → DXF con ezdxf + preview SVG; limpieza opcional con qwen3-vl y fallback al CV puro |
 | `backend/app/services/organic.py` | Cliente del servicio orgánico + reparación/normalizado de malla (trimesh) |
+| `backend/app/services/dimensions.py` | Extrae la medida real del prompt por regex ("altura 120 mm", "6 cm") |
+| `backend/app/services/mesh_service.py` | trimesh: STL→GLB para el visor, watertight, dimensiones, voladizos |
+| `backend/app/services/llm.py` | Cliente Ollama (qwen3-vl) para la limpieza 2D; prompt en `app/prompts/sketch_refine.md` |
+| `backend/app/routers/` | FastAPI: sesiones, SSE de progreso, export (STL/3MF/DXF/SVG), health |
 | `organic/` | Microservicio aparte (uv propio): TRELLIS (o TripoSR) + PyTorch cu128, foto → STL en `:8001` |
-| `frontend/` | React + react-three-fiber: visor Z-up, chat con streaming de código, export |
-
-Los datos de sesión viven en `backend/data/sessions/{id}/` (JSON + una carpeta inmutable por versión) y sobreviven reinicios.
-
-**Nota de seguridad**: el sandbox (AST + subprocess + timeout) es pragmático para una herramienta local personal; no es una frontera de seguridad contra un modelo hostil.
+| `frontend/` | React: chat con dos modos, visor 3D (react-three-fiber, Z-up) y visor 2D (SVG), export |
 
 ## Configuración
 
-Variables de entorno con prefijo `PRINTCAD_` (ver `backend/app/config.py`): `PRINTCAD_MODEL_CODE` (por defecto `qwen2.5-coder:14b` — evita modelos >16 GB como qwen3.6, desbordan la VRAM), `PRINTCAD_BED_SIZE_MM`, `PRINTCAD_EXEC_TIMEOUT_S`, `PRINTCAD_OLLAMA_HOST`, `PRINTCAD_ORGANIC_SERVICE_URL` (por defecto `http://localhost:8001`), `PRINTCAD_ORGANIC_DEFAULT_SIZE_MM`.
+Variables de entorno con prefijo `PRINTCAD_` (ver `backend/app/config.py`):
+
+- `PRINTCAD_ORGANIC_SERVICE_URL` (por defecto `http://localhost:8001`), `PRINTCAD_ORGANIC_DEFAULT_SIZE_MM` (80)
+- `PRINTCAD_SKETCH_DEFAULT_WIDTH_MM` (100) — ancho asumido si no se indica medida
+- `PRINTCAD_SKETCH_MIN_CONTOUR_AREA_FRAC` (0.0005) — filtra motas pequeñas
+- `PRINTCAD_SKETCH_SIMPLIFY_EPSILON_FRAC` (0.005) — agresividad de la simplificación de contornos
+- `PRINTCAD_MODEL_VISION` (qwen3-vl:8b), `PRINTCAD_OLLAMA_HOST`, `PRINTCAD_BED_SIZE_MM`
 
 ## Tests
 
 ```powershell
 cd backend
-uv run pytest        # sandbox, seguridad AST, mallas y API (sin LLM)
+uv run pytest        # API, mallas, pipeline 2D completo (sin servicios externos)
 ```
 
 ## Hoja de ruta
 
-- Gizmos de edición manual, operaciones booleanas entre piezas y panel de parámetros editables.
-- ~~Hunyuan3D-2/TRELLIS como alternativa de mayor calidad a TripoSR en el servicio orgánico~~ — hecho: TRELLIS es el motor por defecto (`ORGANIC_ENGINE=triposr` para volver al antiguo).
+- Gizmos de edición manual y panel de parámetros editables.
+- Detección de círculos en el modo 2D (agujeros como entidades CIRCLE del DXF en vez de polilíneas).

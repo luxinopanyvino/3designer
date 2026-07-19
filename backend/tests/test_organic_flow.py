@@ -1,13 +1,11 @@
 import io
 
-import numpy as np
 import pytest
 import trimesh
 
 from app.services import organic
 from app.services.organic import OrganicServiceError, repair_and_normalize
-from tests.test_api import _sse_events, client  # noqa: F401
-from tests.test_image_flow import PNG_1PX
+from tests.conftest import PNG_1PX, _sse_events
 
 
 def _dirty_stl() -> bytes:
@@ -36,15 +34,7 @@ def test_repair_rejects_empty():
         repair_and_normalize(empty, 80.0)
 
 
-@pytest.fixture()
-def fake_organic_service(monkeypatch):
-    async def fake_request(image_bytes: bytes) -> bytes:
-        return trimesh.creation.icosphere(subdivisions=2, radius=1.0).export(file_type="stl")
-
-    monkeypatch.setattr(organic, "request_organic_mesh", fake_request)
-
-
-def test_organic_job_creates_version(client, fake_organic_service):  # noqa: F811
+def test_organic_job_creates_version(client, fake_organic_service):
     sid = client.post("/api/sessions").json()["id"]
     r = client.post(
         f"/api/sessions/{sid}/messages",
@@ -61,7 +51,7 @@ def test_organic_job_creates_version(client, fake_organic_service):  # noqa: F81
     assert "status" in names and events[-1][0] == "completed"
     completed = events[-1][1]
     assert completed["source"] == "organic"
-    assert completed["code"] is None
+    assert "code" not in completed
     assert max(completed["dimensions_mm"].values()) == pytest.approx(50.0, rel=0.01)
 
     glb = client.get(f"/api/sessions/{sid}/versions/1/model.glb")
@@ -70,10 +60,34 @@ def test_organic_job_creates_version(client, fake_organic_service):  # noqa: F81
     stl = client.get(f"/api/sessions/{sid}/export", params={"format": "stl"})
     assert stl.status_code == 200
     step = client.get(f"/api/sessions/{sid}/export", params={"format": "step"})
-    assert step.status_code == 404  # organic meshes have no B-rep
+    assert step.status_code == 422  # STEP no longer exists as a format
 
 
-def test_organic_requires_image(client):  # noqa: F811
+def test_organic_size_from_prompt(client, fake_organic_service, monkeypatch):
+    captured = {}
+    original = organic.generate_organic_model
+
+    async def spying_generate(**kwargs):
+        captured["target_size_mm"] = kwargs["target_size_mm"]
+        return await original(**kwargs)
+
+    monkeypatch.setattr(organic, "generate_organic_model", spying_generate)
+
+    sid = client.post("/api/sessions").json()["id"]
+    r = client.post(
+        f"/api/sessions/{sid}/messages",
+        data={"content": "una figura de altura 120 mm", "mode": "organic"},
+        files={"image": ("ref.png", io.BytesIO(PNG_1PX), "image/png")},
+    )
+    with client.stream(
+        "GET", f"/api/sessions/{sid}/events", params={"job_id": r.json()["job_id"]}
+    ) as s:
+        events = _sse_events(s)
+    assert events[-1][0] == "completed"
+    assert captured["target_size_mm"] == 120.0
+
+
+def test_organic_requires_image(client):
     sid = client.post("/api/sessions").json()["id"]
     r = client.post(
         f"/api/sessions/{sid}/messages", data={"content": "una figura", "mode": "organic"}
@@ -81,7 +95,7 @@ def test_organic_requires_image(client):  # noqa: F811
     assert r.status_code == 422
 
 
-def test_organic_service_down_reports_error(client, monkeypatch):  # noqa: F811
+def test_organic_service_down_reports_error(client, monkeypatch):
     async def failing_request(image_bytes: bytes) -> bytes:
         raise OrganicServiceError("El servicio de reconstrucción orgánica no responde")
 

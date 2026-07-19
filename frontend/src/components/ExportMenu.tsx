@@ -1,7 +1,8 @@
 import { exportUrl } from '../api/client'
 import { useAppStore } from '../store/useAppStore'
 
-const DEFAULT_FORMATS = ['stl', 'step'] as const
+const DEFAULT_FORMATS = ['stl'] as const
+const SKETCH_FORMATS = ['dxf', 'svg'] as const
 
 export default function ExportMenu() {
   const sessionId = useAppStore((s) => s.sessionId)
@@ -13,7 +14,9 @@ export default function ExportMenu() {
 
   const version = versions.find((v) => v.version === currentVersion)
   const formats =
-    version?.source === 'organic' ? allFormats.filter((f) => f !== 'step') : allFormats
+    version?.source === 'sketch'
+      ? SKETCH_FORMATS
+      : allFormats.filter((f) => !['dxf', 'svg', 'step'].includes(f))
 
   return (
     <div className="export-menu">
