@@ -8,7 +8,9 @@ Reply with ONLY a JSON object, no prose, with this shape:
   "features": [
     {"type": "hole|slot|boss|rib|fillet|chamfer|pattern|other", "count": 1, "position": "description", "size_mm": 0}
   ],
-  "notes": "anything relevant for modeling it (symmetry, proportions, function)"
+  "notes": "anything relevant for modeling it (symmetry, proportions, function)",
+  "detailed_description": "4-8 sentences for an engineer who cannot see the image: overall shape (prismatic/cylindrical/L-shaped...), how it rests on a table, each feature and where it sits relative to the others, with estimated dimensions in mm"
 }
 
 Estimate dimensions from visual proportions; the user may provide one real dimension to scale from.
+Only report features you can clearly see; do not invent ribs, patterns or details from shading or rendering artifacts.

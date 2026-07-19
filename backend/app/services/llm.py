@@ -115,17 +115,22 @@ class LLMService:
                 "images": [image_bytes],
             }
         ]
-        options = {"temperature": 0.1, "num_predict": 2048}
-        try:
-            # Thinking models (qwen3-vl) can burn the whole budget on reasoning
-            # and return empty content; ask Ollama to skip the thinking phase.
-            response = await self.client.chat(
-                model=settings.model_vision, messages=messages, options=options, think=False
-            )
-        except Exception:
-            response = await self.client.chat(
-                model=settings.model_vision, messages=messages, options=options
-            )
-        raw = response["message"]["content"]
+        # qwen3-vl thinks even with think=False (Ollama stopped honoring it),
+        # and num_predict caps thinking+content together, so give it a large
+        # budget and retry once if reasoning still swallowed the reply.
+        options = {"temperature": 0.1, "num_predict": 8192}
+        raw = ""
+        for _ in range(2):
+            try:
+                response = await self.client.chat(
+                    model=settings.model_vision, messages=messages, options=options, think=False
+                )
+            except Exception:
+                response = await self.client.chat(
+                    model=settings.model_vision, messages=messages, options=options
+                )
+            raw = response["message"]["content"]
+            if raw.strip():
+                break
         parsed = extract_json(raw)
         return json.dumps(parsed, ensure_ascii=False) if parsed else raw.strip()
