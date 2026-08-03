@@ -31,17 +31,12 @@ export interface SessionData {
 
 export interface Health {
   status: string
-  ollama: {
-    reachable: boolean
-    models: string[]
-    vision_model_present: boolean
-  }
   organic_available: boolean
   export_formats: string[]
   bed_size_mm: number
 }
 
-export type Stage = 'idle' | 'organic_generating' | 'vectorizing' | 'sketch_refining'
+export type Stage = 'idle' | 'organic_generating' | 'vectorizing'
 
 export interface EventHandlers {
   onStatus: (stage: Stage, attempt: number) => void

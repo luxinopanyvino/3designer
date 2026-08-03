@@ -1,11 +1,10 @@
-"""Image -> 2D DXF pipeline: OpenCV contour vectorization + optional LLM cleanup.
+"""Image -> 2D DXF pipeline: OpenCV contour vectorization.
 
-The CV path is deterministic. The vision LLM only post-processes contours when
-the prompt asks for cleanup, and any failure falls back to the raw CV result.
+Fully deterministic: the prompt only supplies the real-world dimension, which
+`dimensions.parse_target_size_mm` reads with a regex.
 """
 
 import asyncio
-import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,23 +14,7 @@ import numpy as np
 
 from app.config import settings
 from app.services.dimensions import parse_target_size_mm
-from app.services.llm import LLMService, extract_json
 from app.services.mesh_service import MeshInfo
-
-CLEANUP_KEYWORDS = {
-    "contorno",
-    "exterior",
-    "solo",
-    "redondea",
-    "círculo",
-    "circulo",
-    "simplifica",
-    "limpia",
-    "quita",
-    "elimina",
-}
-
-LLM_FALLBACK_WARNING = "La limpieza con IA falló; se usa el contorno vectorizado."
 
 
 class SketchError(Exception):
@@ -101,33 +84,6 @@ def _scale_to_target(contours: list[Contour], value_mm: float, axis: str | None)
     ]
 
 
-def _translate_to_origin(contours: list[Contour]) -> list[Contour]:
-    min_x, min_y, _, _ = _bbox(contours)
-    return [
-        Contour(points=[(p[0] - min_x, p[1] - min_y) for p in c.points], hole=c.hole)
-        for c in contours
-    ]
-
-
-def _wants_cleanup(prompt: str) -> bool:
-    lowered = prompt.lower()
-    return any(word in lowered for word in CLEANUP_KEYWORDS)
-
-
-def _contours_from_json(parsed: dict) -> list[Contour]:
-    contours: list[Contour] = []
-    for item in parsed.get("contours", []):
-        try:
-            points = [(float(x), float(y)) for x, y in item.get("points", [])]
-        except (TypeError, ValueError):
-            continue
-        if len(points) >= 3:
-            contours.append(Contour(points=points, hole=bool(item.get("hole", False))))
-    if not any(not c.hole for c in contours):
-        return []
-    return contours
-
-
 def _write_dxf(contours: list[Contour], path: Path) -> None:
     doc = ezdxf.new("R2010")
     doc.header["$INSUNITS"] = 4  # millimeters
@@ -161,7 +117,6 @@ async def generate_sketch(
     target_size_mm: float | None,
     out_dir: Path,
     emit,
-    llm: LLMService | None = None,
 ) -> MeshInfo:
     await emit("status", {"stage": "vectorizing", "attempt": 1})
     contours = await asyncio.to_thread(
@@ -178,23 +133,6 @@ async def generate_sketch(
         value_mm, axis = parse_target_size_mm(prompt) or (settings.sketch_default_width_mm, None)
     contours = _scale_to_target(contours, value_mm, axis)
 
-    warnings: list[str] = []
-    if prompt and _wants_cleanup(prompt):
-        await emit("status", {"stage": "sketch_refining", "attempt": 1})
-        llm = llm or LLMService()
-        try:
-            contours_json = json.dumps(
-                {"contours": [{"points": c.points, "hole": c.hole} for c in contours]}
-            )
-            raw = await llm.analyze_sketch(image_bytes, contours_json, prompt)
-            refined = _contours_from_json(extract_json(raw) or {})
-            if refined:
-                contours = _translate_to_origin(refined)
-            else:
-                warnings.append(LLM_FALLBACK_WARNING)
-        except Exception:  # noqa: BLE001 - Ollama down, timeout, etc.
-            warnings.append(LLM_FALLBACK_WARNING)
-
     _, _, width, height = _bbox(contours)
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_dxf(contours, out_dir / "model.dxf")
@@ -204,5 +142,5 @@ async def generate_sketch(
         dimensions_mm={"x": round(width, 2), "y": round(height, 2), "z": 0.0},
         volume_mm3=0.0,
         watertight=True,
-        warnings=warnings,
+        warnings=[],
     )

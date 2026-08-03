@@ -1,5 +1,4 @@
 import asyncio
-import json
 
 import cv2
 import ezdxf
@@ -7,7 +6,6 @@ import numpy as np
 import pytest
 
 from app.services.dimensions import parse_target_size_mm
-from app.services.llm import LLMService
 from app.services.sketch import SketchError, _vectorize, generate_sketch
 
 
@@ -86,51 +84,20 @@ def test_generate_sketch_explicit_size_wins(tmp_path):
     assert info.dimensions_mm["x"] == pytest.approx(80.0, rel=0.02)
 
 
-def test_llm_cleanup_replaces_contours(tmp_path, monkeypatch):
-    called = {}
-
-    async def fake_analyze(self, image_bytes, contours_json, prompt):
-        called["prompt"] = prompt
-        return json.dumps(
-            {"contours": [{"points": [[0, 0], [40, 0], [40, 40], [0, 40]], "hole": False}]}
-        )
-
-    monkeypatch.setattr(LLMService, "analyze_sketch", fake_analyze)
-
+def test_prompt_only_supplies_the_dimension(tmp_path):
+    """Wording that used to trigger the AI cleanup is now inert: the only thing
+    read out of the prompt is the measurement, and the CV contours always win."""
     info = asyncio.run(
         generate_sketch(
             image_bytes=_plate_png(),
-            prompt="solo el contorno exterior, ancho 40 mm",
+            prompt="solo el contorno exterior, simplifica, ancho 50 mm",
             target_size_mm=None,
             out_dir=tmp_path,
             emit=_noop_emit,
         )
     )
-    assert called["prompt"] == "solo el contorno exterior, ancho 40 mm"
-    assert info.dimensions_mm["x"] == pytest.approx(40.0)
     assert info.warnings == []
-
-    doc = ezdxf.readfile(tmp_path / "model.dxf")
-    assert len(list(doc.modelspace().query("LWPOLYLINE"))) == 1
-
-
-def test_llm_cleanup_failure_falls_back(tmp_path, monkeypatch):
-    async def bad_analyze(self, image_bytes, contours_json, prompt):
-        return "no json at all"
-
-    monkeypatch.setattr(LLMService, "analyze_sketch", bad_analyze)
-
-    info = asyncio.run(
-        generate_sketch(
-            image_bytes=_plate_png(),
-            prompt="simplifica, ancho 50 mm",
-            target_size_mm=None,
-            out_dir=tmp_path,
-            emit=_noop_emit,
-        )
-    )
-    assert any("limpieza" in w.lower() for w in info.warnings)
     assert info.dimensions_mm["x"] == pytest.approx(50.0, rel=0.02)
 
     doc = ezdxf.readfile(tmp_path / "model.dxf")
-    assert len(list(doc.modelspace().query("LWPOLYLINE"))) == 2  # CV contours kept
+    assert len(list(doc.modelspace().query("LWPOLYLINE"))) == 2  # outer + hole kept

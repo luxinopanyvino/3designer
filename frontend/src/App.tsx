@@ -13,7 +13,6 @@ export default function App() {
   }, [init])
 
   const organicOk = health?.organic_available ?? false
-  const visionOk = (health?.ollama.reachable && health.ollama.vision_model_present) ?? false
 
   return (
     <div className="app">
@@ -24,7 +23,7 @@ export default function App() {
         <div className="header-actions">
           <span
             className={`health-dot ${organicOk ? 'ok' : 'bad'}`}
-            title={organicOk ? 'Servicio 3D listo' : 'Servicio 3D (TRELLIS) no disponible'}
+            title={organicOk ? 'Servicio 3D listo' : 'Servicio 3D (TRELLIS.2) no disponible'}
           />
           <button className="ghost" onClick={() => void newSession()}>
             Nueva sesión
@@ -33,14 +32,8 @@ export default function App() {
       </header>
       {health && !organicOk && (
         <div className="banner">
-          Servicio 3D (TRELLIS, puerto 8001) no disponible — solo modo 2D DXF. Arranca organic/
+          Servicio 3D (TRELLIS.2, puerto 8001) no disponible — solo modo 2D DXF. Arranca organic/
           con: uv run uvicorn service:app --port 8001
-        </div>
-      )}
-      {health && !visionOk && (
-        <div className="banner soft">
-          Sin qwen3-vl en Ollama: la limpieza 2D por prompt no estará disponible (ollama pull
-          qwen3-vl:8b)
         </div>
       )}
       <main className="app-main">

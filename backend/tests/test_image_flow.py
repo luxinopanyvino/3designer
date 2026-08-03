@@ -3,23 +3,7 @@ import io
 import trimesh
 
 from app.services import organic
-from app.services.llm import extract_json
 from tests.conftest import PNG_1PX, _sse_events
-
-
-def test_extract_json_fenced():
-    assert extract_json('Here:\n```json\n{"a": 1}\n```') == {"a": 1}
-
-
-def test_extract_json_bare():
-    assert extract_json('prose {"part_type": "washer", "n": 2} more prose') == {
-        "part_type": "washer",
-        "n": 2,
-    }
-
-
-def test_extract_json_invalid_returns_none():
-    assert extract_json("no json here") is None
 
 
 def test_image_upload_creates_message_with_url(client, monkeypatch):

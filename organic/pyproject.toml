@@ -13,6 +13,7 @@ dependencies = [
     "numba>=0.59",
     "numpy>=2.4.6",
     "omegaconf>=2.3.1",
+    "opencv-python-headless>=4.10",
     "pillow>=12.3.0",
     "plyfile>=1.1.4",
     "python-multipart>=0.0.32",
@@ -20,13 +21,20 @@ dependencies = [
     "safetensors>=0.8.0",
     "scikit-image>=0.26.0",
     "spconv-cu126>=2.3.8",
-    "torch>=2.11.0",
-    "torchvision>=0.26.0",
+    # Pinned to 2.10.0: the prebuilt sm_120 extension wheels (o_voxel, cumesh,
+    # flex_gemm, nvdiffrast) are compiled against that libtorch ABI and fail to
+    # load against any other. cu128 rather than cu128 because spconv (TRELLIS v1)
+    # has no CUDA 13 build; the extensions link no CUDA runtime of their own, so
+    # they are indifferent to which one torch ships.
+    "torch==2.10.0",
+    "torchvision==0.25.0",
     "tqdm>=4.68.4",
-    "transformers>=4.35,<5",
+    "transformers>=4.56,<5",  # DINOv3ViTModel, the TRELLIS.2 image conditioner
     "trimesh>=4.12.2",
+    "triton-windows>=3.7",  # flex_gemm (TRELLIS.2 sparse conv) is Triton-based
     "utils3d",
     "uvicorn[standard]>=0.51.0",
+    "zstandard>=0.23",
 ]
 
 [tool.uv.sources]
