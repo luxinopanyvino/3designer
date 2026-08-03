@@ -43,7 +43,7 @@ export default function MessageInput() {
           onClick={() => setMode('organic')}
           title={
             organicAvailable
-              ? 'Foto → malla 3D imprimible (reconstrucción neuronal TRELLIS)'
+              ? 'Foto → malla 3D imprimible (reconstrucción neuronal TRELLIS.2)'
               : 'Servicio 3D no disponible — arranca organic/ (uv run uvicorn service:app --port 8001)'
           }
         >

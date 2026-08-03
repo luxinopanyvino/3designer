@@ -39,15 +39,8 @@ class JobAcceptedOut(BaseModel):
     job_id: str
 
 
-class OllamaHealth(BaseModel):
-    reachable: bool
-    models: list[str] = []
-    vision_model_present: bool = False
-
-
 class HealthOut(BaseModel):
     status: str
-    ollama: OllamaHealth
     organic_available: bool = False
     export_formats: list[str]
     bed_size_mm: float

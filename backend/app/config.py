@@ -4,8 +4,6 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    ollama_host: str = "http://localhost:11434"
-    model_vision: str = "qwen3-vl:8b"
     bed_size_mm: float = 220.0
     max_height_mm: float = 250.0
     organic_service_url: str = "http://localhost:8001"
